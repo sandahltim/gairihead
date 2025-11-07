@@ -36,21 +36,17 @@ hardware:
     right_ring:
       pixels: 12
 
-# Intelligence Configuration
+# Intelligence Configuration (v2.1)
+# All LLM queries route through Gary's websocket server
 intelligence:
-  local_llm:
-    enabled: true
-    model: "llama3.2:3b"
-    host: "http://localhost:11434"
-    temperature: 0.7
-    max_tokens: 150
-    timeout: 5000  # ms
+  gary_websocket_url: "ws://localhost:8765/ws"  # Gary server WebSocket
+  escalation_threshold: 0.7  # Confidence threshold for cloud escalation
 
-  haiku:
-    enabled: true
-    escalation_threshold: 0.7  # Confidence threshold
-    websocket_url: "ws://localhost:8765/ws"
-    retry_attempts: 3
+  # Notes:
+  # - Tier 1 (Local): Qwen 2.5 Coder 7B runs on Gary's server
+  # - Tier 2 (Cloud): Claude Haiku 4.5 via Gary
+  # - Authorization: Strangers (Level 3) get local-only
+  # - Training data collection happens on Gary's server
 
 # Voice Configuration
 voice:
