@@ -490,7 +490,6 @@ void handleJsonMessage(String json) {
     tier = doc["tier"] | "local";
     responseTime = doc["response_time"] | 0.0;
 
-    // Acknowledge receipt
     Serial.println(F("{\"ok\":1}"));
 
     // Redraw if on conversation view
@@ -632,6 +631,6 @@ void loop() {
   // Handle touch input
   handleTouch();
 
-  // Small delay to prevent overwhelming the system
-  delay(50);
+  // Small delay - keep short for fast serial processing
+  delay(10);
 }
