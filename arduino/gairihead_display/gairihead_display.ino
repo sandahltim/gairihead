@@ -25,11 +25,11 @@
 
 // TFT uses 8-bit parallel interface (no CS/DC/RST defines needed)
 
-// Touchscreen pins (2.8" TFT HAT)
-#define YP A2  // Y+ (must be analog)
-#define XM A3  // X- (must be analog)
-#define YM 7   // Y-
-#define XP 6   // X+
+// Touchscreen pins (TP28017 - Detected by diagnose_Touchpins)
+#define YP A3  // Y+ (must be analog)
+#define XM A2  // X- (must be analog)
+#define YM 9   // Y-
+#define XP 8   // X+
 
 // Touchscreen calibration
 #define TS_MINX 150
@@ -545,23 +545,24 @@ void handleTouch() {
   }
 
   // Debounce
-  unsigned long now = millis();
-  if (now - lastTouchTime < touchDebounce) {
+  unsigned long currentTime = millis();
+  if (currentTime - lastTouchTime < touchDebounce) {
     return;
   }
-  lastTouchTime = now;
+  lastTouchTime = currentTime;
 
   // Check which button was pressed
   if (isTouchInButton(p, btnLeft)) {
-    // Previous view
+    Serial.println(F("{\"touch\":\"left\"}"));
     previousView();
 
   } else if (isTouchInButton(p, btnRight)) {
-    // Next view
+    Serial.println(F("{\"touch\":\"right\"}"));
     nextView();
 
   } else if (isTouchInButton(p, btnCenter)) {
-    // Reserved for future use
+    Serial.println(F("{\"touch\":\"center\"}"));
+    // Reserved for future actions
   }
 }
 
@@ -576,8 +577,12 @@ void setup() {
     ; // Wait for serial port
   }
 
-  // Initialize TFT with MCUFRIEND
+  // Print configuration
+  Serial.print(F("{\"device\":\"GairiHead Display\",\"display\":\""));
   uint16_t ID = tft.readID();
+  Serial.print(ID, HEX);
+  Serial.println(F("\",\"touch\":\"TP28017\",\"status\":\"ready\"}}"));
+
   tft.begin(ID);
   tft.setRotation(0);
   tft.fillScreen(COLOR_BG);

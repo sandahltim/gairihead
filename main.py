@@ -33,6 +33,7 @@ from src.voice_handler import VoiceHandler
 from src.llm_tier_manager import LLMTierManager
 from src.camera_manager import CameraManager
 from src.vision_handler import VisionHandler
+from src.arduino_display import ArduinoDisplay
 
 
 class GairiHeadAssistant:
@@ -55,6 +56,7 @@ class GairiHeadAssistant:
         self.camera = None
         self.vision = None
         self.llm_manager = None
+        self.arduino_display = None
         self.voice = None
         
         # State
@@ -102,11 +104,38 @@ class GairiHeadAssistant:
             logger.error(f"❌ LLM manager initialization FAILED: {e}")
             logger.error("Cannot continue without LLM manager")
             return False
-        
-        # 4. Voice Handler (REQUIRED)
+
+        # 4. Arduino Display (OPTIONAL)
         try:
-            logger.info("4. Initializing voice handler...")
-            self.voice = VoiceHandler(self.config, llm_tier_manager=self.llm_manager)
+            logger.info("4. Initializing Arduino display...")
+            display_config = self.config.get('arduino_display', {})
+            enabled = display_config.get('enabled', False)
+
+            if enabled:
+                self.arduino_display = ArduinoDisplay(
+                    port=display_config.get('port', '/dev/ttyACM0'),
+                    baudrate=display_config.get('baudrate', 115200),
+                    enabled=True
+                )
+                if self.arduino_display.connected:
+                    logger.success("✅ Arduino display connected")
+                else:
+                    logger.warning("⚠️ Arduino display configured but not connected")
+                    self.arduino_display = None
+            else:
+                logger.info("   Arduino display disabled in config")
+        except Exception as e:
+            logger.error(f"❌ Arduino display initialization failed: {e}")
+            self.arduino_display = None
+
+        # 5. Voice Handler (REQUIRED)
+        try:
+            logger.info("5. Initializing voice handler...")
+            self.voice = VoiceHandler(
+                self.config,
+                llm_tier_manager=self.llm_manager,
+                arduino_display=self.arduino_display
+            )
             logger.success("✅ Voice handler initialized")
         except Exception as e:
             logger.error(f"❌ Voice handler initialization FAILED: {e}")
