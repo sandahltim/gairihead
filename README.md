@@ -35,11 +35,17 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - **Cloud LLM** (Claude Haiku 4.5) - Complex reasoning, 40% of queries
 - **Cost**: <$10/month vs $50+ all-cloud
 
+### 📺 Visual Feedback
+- **Arduino Display** - 2.8" TFT touchscreen with real-time conversation view
+- **Touch interface** - View switching (Conversation, Status, Debug)
+- **Expression emoji** - Shows current emotional state
+- **Authorization display** - Color-coded security levels (green/yellow/red)
+
 ### 📡 Integration
 - **Websocket API** - Remote control from main Gary system
-- **Camera** - Logitech C920 or Pi Camera Module 3
-- **Face detection** - OpenCV Haar Cascade
-- **Voice** - Whisper STT, Piper TTS (future)
+- **Camera** - Logitech C920 (USB) or Pi Camera Module 3
+- **Face recognition** - Authorization levels with training data
+- **Voice I/O** - Whisper STT, pyttsx3 TTS - **WORKING**
 
 ---
 
@@ -48,9 +54,11 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 ### Prerequisites
 - Raspberry Pi 5 (4GB+)
 - 3x SG90 servo motors
+- Arduino Mega 2560 + TP28017 2.8" TFT HAT (for display)
 - 2x WS2812B NeoPixel rings (12 pixels each)
 - Raspberry Pi Pico 2 (for NeoPixel control)
-- USB camera or Pi Camera Module 3
+- USB camera (Logitech C920 or equivalent)
+- USB microphone + speaker (EMEET OfficeCore M0 Plus recommended)
 - 5V/2A power supply for servos (separate from Pi!)
 
 ### Installation
@@ -85,6 +93,19 @@ python tests/test_servos.py
 python src/gairi_head_server.py
 ```
 
+### Voice Interaction
+
+```bash
+# Interactive mode (button-triggered voice)
+cd ~/GairiHead
+source venv/bin/activate
+python main.py --mode interactive
+
+# Press Enter to trigger voice interaction
+# Speak when you see "listening" on Arduino display
+# Your conversation will appear on the display
+```
+
 ---
 
 ## Hardware Setup
@@ -98,8 +119,24 @@ GPIO 14 (TX)     → Pico 2 UART RX
 GPIO 15 (RX)     → Pico 2 UART TX
 ```
 
+### Arduino Mega 2560 (Display Controller)
+```
+Connection: USB to Pi 5 (/dev/ttyACM0)
+Display: TP28017 2.8" TFT HAT (240x320, ILI9341 controller)
+Touch Pins: YP=A3, XM=A2, YM=9, XP=8
+Library: MCUFRIEND_kbv (8-bit parallel interface)
+Baudrate: 115200
+Protocol: JSON over serial
+
+Views:
+  - Conversation: User/Gairi text with expression emoji
+  - Status: User auth, confidence, system state
+  - Debug: LLM tier, tools, response time
+```
+
 ### Power Requirements
 - **Pi 5**: USB-C 5V/5A (official power supply)
+- **Arduino Mega**: Powered via USB from Pi 5
 - **Servos**: SEPARATE 5V/2A supply (do NOT power from Pi!)
 - **Common ground** between Pi and servo supply
 

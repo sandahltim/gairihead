@@ -27,6 +27,97 @@
 
 ---
 
+## 🔧 Recent Fixes (2025-11-07)
+
+### Fix 1: Touchscreen Pin Configuration (Commit c7eecb1)
+
+**Problem**: Touch screen not responding - all pressure readings returned zero
+
+**Root Cause**: Incorrect pin configuration
+- Was using standard Arduino Uno shield pins: YP=A2, XM=A1, YM=14, XP=17
+- TP28017 on Arduino Mega uses different analog pins for touchscreen
+- MCUFRIEND library uses A0-A5 for LCD control, conflicting with touch pins
+
+**Investigation**:
+- Used MCUFRIEND `diagnose_Touchpins` utility from library examples
+- Utility systematically tested pin combinations to find resistive pairs
+- Discovered actual pins: YP=A3 (analog), XM=A2 (analog), YM=9, XP=8
+
+**Solution**:
+```cpp
+// Corrected pin configuration
+#define YP A3  // Y+ (must be analog)
+#define XM A2  // X- (must be analog)
+#define YM 9   // Y-
+#define XP 8   // X+
+```
+
+**Testing**:
+- Touch events now detected with valid pressure readings (10-1000 range)
+- View switching with < and > buttons fully functional
+- Touch calibration accurate for button positions
+
+**Result**: ✅ Touch interface operational
+
+---
+
+### Fix 2: Serial Timing Optimization (Commit b163ba1)
+
+**Problem**: Conversation text not displaying on screen despite JSON being sent successfully
+
+**Symptoms**:
+- Arduino responded with `{"ok":1}` confirming message received
+- Serial communication working
+- JSON parsing successful
+- But display showed empty text (length=0 for user/gairi strings)
+
+**Root Cause**: Arduino loop delay was too slow to process incoming serial data
+- Original delay: 50ms at end of loop()
+- At 115200 baud: ~11,520 bytes/second = ~576 bytes per 50ms window
+- Typical message: 120-150 bytes
+- With 50ms delay: Serial buffer would partially fill between reads
+- Result: Incomplete JSON messages, truncated strings
+
+**Technical Analysis**:
+```
+Baud Rate: 115200 bits/sec
+Data Rate: 11,520 bytes/sec (with 10-bit encoding)
+50ms delay: 576 bytes could arrive
+Arduino buffer: Only reads when loop() cycles
+Result: Buffer overflow, data loss
+```
+
+**Solution**:
+```cpp
+// Reduced loop delay for faster serial processing
+void loop() {
+  // Handle serial input
+  while (Serial.available() > 0) {
+    // ... read and buffer
+  }
+
+  handleTouch();
+
+  delay(10);  // Changed from 50ms to 10ms
+}
+```
+
+**Impact**:
+- 5x faster serial processing (10ms vs 50ms)
+- Can now handle 115 bytes per loop cycle (sufficient for messages)
+- Messages process completely before timeout
+- Text renders immediately and reliably
+
+**Testing**:
+- Short messages (Hello/Hi): ✅ Display correctly
+- Long messages (150+ chars): ✅ Display correctly
+- Rapid updates: ✅ No dropped messages
+- Touch still responsive: ✅ 10ms sufficient for touch polling
+
+**Result**: ✅ Text display operational
+
+---
+
 ## ✅ COMPLETED
 
 ### 1. Arduino Display Module (`src/arduino_display.py`)
