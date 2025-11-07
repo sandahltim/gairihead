@@ -85,7 +85,8 @@ class ArduinoDisplay:
                 return False
 
         try:
-            json_str = json.dumps(message)
+            # Use compact JSON format (no spaces) to reduce size
+            json_str = json.dumps(message, separators=(',', ':'))
             self.serial.write(json_str.encode('utf-8'))
             self.serial.write(b'\n')  # Newline delimiter
             self.serial.flush()

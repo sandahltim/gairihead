@@ -253,23 +253,23 @@ void drawConversationView() {
   tft.print(expressionToEmoji(expression));
 
   // User text
-  if (userText.length() > 0) {
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_USER);
-    tft.setCursor(10, 45);
-    tft.print("User:");
-    wrapText(userText, 10, 60, SCREEN_WIDTH - 20, 12, COLOR_TEXT);
-  }
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_USER);
+  tft.setCursor(10, 45);
+  tft.print("User:");
+
+  tft.setTextSize(1);
+  wrapText(userText, 10, 65, SCREEN_WIDTH - 20, 10, COLOR_TEXT);
 
   // Gairi text
-  if (gairiText.length() > 0) {
-    int gairiY = 140;
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_GAIRI);
-    tft.setCursor(10, gairiY);
-    tft.print("Gairi:");
-    wrapText(gairiText, 10, gairiY + 15, SCREEN_WIDTH - 20, 12, COLOR_TEXT);
-  }
+  int gairiY = 135;
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_GAIRI);
+  tft.setCursor(10, gairiY);
+  tft.print("Gairi:");
+
+  tft.setTextSize(1);
+  wrapText(gairiText, 10, gairiY + 20, SCREEN_WIDTH - 20, 10, COLOR_TEXT);
 
   // Footer info
   tft.setTextSize(1);
@@ -467,30 +467,36 @@ void previousView() {
 // =============================================================================
 
 void handleJsonMessage(String json) {
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<1024> doc;
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
-    Serial.println(F("{\"error\":\"parse\"}"));
+    Serial.print(F("{\"error\":\"parse\",\"code\":\""));
+    Serial.print(error.c_str());
+    Serial.println(F("\"}"));
     return;
   }
 
   const char* type = doc["type"];
 
   if (strcmp(type, "conversation") == 0) {
-    // Update conversation data
-    userText = doc["user_text"].as<String>();
-    gairiText = doc["gairi_text"].as<String>();
+    // Extract conversation data
+    const char* userTextPtr = doc["user_text"];
+    const char* gairiTextPtr = doc["gairi_text"];
+
+    userText = (userTextPtr != nullptr) ? String(userTextPtr) : "";
+    gairiText = (gairiTextPtr != nullptr) ? String(gairiTextPtr) : "";
     expression = doc["expression"].as<String>();
     tier = doc["tier"] | "local";
     responseTime = doc["response_time"] | 0.0;
+
+    // Acknowledge receipt
+    Serial.println(F("{\"ok\":1}"));
 
     // Redraw if on conversation view
     if (currentView == VIEW_CONVERSATION) {
       drawConversationView();
     }
-
-    Serial.println(F("{\"ok\":1}"));
 
   } else if (strcmp(type, "status") == 0) {
     userName = doc["user"].as<String>();
