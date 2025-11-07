@@ -1,7 +1,7 @@
 /*
  * GairiHead TFT Display Controller
  *
- * Arduino Uno + 2.8" ILI9341 TFT HAT (240x320)
+ * Arduino Uno + 2.8" TP28017 TFT HAT (240x320)
  * Serial communication with Raspberry Pi 5
  *
  * Features:
@@ -10,10 +10,12 @@
  * - Expression-to-emoji mapping
  * - Authorization level color coding
  * - JSON protocol over USB serial
+ *
+ * Uses MCUFRIEND_kbv library for 8-bit parallel interface
  */
 
 #include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
+#include <MCUFRIEND_kbv.h>
 #include <TouchScreen.h>
 #include <ArduinoJson.h>
 
@@ -21,10 +23,7 @@
 // HARDWARE CONFIGURATION
 // =============================================================================
 
-// TFT pins (using hardware SPI)
-#define TFT_CS   10
-#define TFT_DC   9
-#define TFT_RST  8
+// TFT uses 8-bit parallel interface (no CS/DC/RST defines needed)
 
 // Touchscreen pins (2.8" TFT HAT)
 #define YP A2  // Y+ (must be analog)
@@ -48,7 +47,7 @@
 // OBJECTS
 // =============================================================================
 
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+MCUFRIEND_kbv tft;  // Use MCUFRIEND for parallel interface
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
 
 // =============================================================================
@@ -571,8 +570,9 @@ void setup() {
     ; // Wait for serial port
   }
 
-  // Initialize TFT
-  tft.begin();
+  // Initialize TFT with MCUFRIEND
+  uint16_t ID = tft.readID();
+  tft.begin(ID);
   tft.setRotation(0);
   tft.fillScreen(COLOR_BG);
 
