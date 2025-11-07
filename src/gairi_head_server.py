@@ -324,7 +324,7 @@ class GairiHeadServer:
                 'error': f'Failed to set expression: {e}'
             }
 
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Handle websocket client connection"""
         client_addr = websocket.remote_address
         logger.info(f"Client connected: {client_addr}")
