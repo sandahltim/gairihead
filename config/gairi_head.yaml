@@ -1,0 +1,152 @@
+# GairiHead Configuration
+# Physical robot configuration for Gary's office presence
+
+version: "1.0"
+
+# Hardware Configuration
+hardware:
+  pi5:
+    uart_device: "/dev/serial0"
+    uart_baud: 115200
+    camera_device: 0
+    camera_resolution: [640, 480]
+    camera_fps: 5
+
+  servos:
+    # Using GPIO pins that won't conflict with M.2 HAT (avoiding 0-11, 12-13)
+    left_eyelid:
+      gpio_pin: 17      # Safe pin, away from M.2 HAT
+      min_angle: 0
+      max_angle: 90
+      neutral_angle: 45
+    right_eyelid:
+      gpio_pin: 27      # Safe pin, away from M.2 HAT
+      min_angle: 0
+      max_angle: 90
+      neutral_angle: 45
+    mouth:
+      gpio_pin: 22      # Safe pin, away from M.2 HAT
+      min_angle: 0      # Closed
+      max_angle: 60     # Wide open
+      neutral_angle: 10 # Slight smile
+
+  neopixels:
+    left_ring:
+      pixels: 12
+    right_ring:
+      pixels: 12
+
+# Intelligence Configuration
+intelligence:
+  local_llm:
+    enabled: true
+    model: "llama3.2:3b"
+    host: "http://localhost:11434"
+    temperature: 0.7
+    max_tokens: 150
+    timeout: 5000  # ms
+
+  haiku:
+    enabled: true
+    escalation_threshold: 0.7  # Confidence threshold
+    websocket_url: "ws://localhost:8765/ws"
+    retry_attempts: 3
+
+# Voice Configuration
+voice:
+  wake_word:
+    enabled: true
+    keywords: ["gary", "hey gary"]
+    sensitivity: 0.5
+    model: "porcupine"  # or "pocketsphinx"
+
+  stt:
+    engine: "whisper"  # or "google", "vosk"
+    model: "base"      # tiny, base, small, medium
+    language: "en"
+
+  tts:
+    engine: "piper"    # or "elevenlabs", "gtts"
+    voice: "en_US-lessac-medium"
+    speed: 1.0
+    volume: 0.8
+
+  microphone:
+    device_index: 0    # Default USB mic
+    sample_rate: 16000
+    chunk_size: 1024
+
+  speaker:
+    device_index: 0    # Default USB speaker
+    volume: 0.8
+
+# Vision Configuration
+vision:
+  face_detection:
+    enabled: true
+    cascade: "haarcascade_frontalface_default.xml"
+    scale_factor: 1.1
+    min_neighbors: 5
+    min_size: [30, 30]
+
+  face_recognition:
+    enabled: true
+    known_faces_dir: "/Gary/GairiHead/data/faces"
+    tolerance: 0.6
+
+  tracking:
+    enabled: true
+    smooth_factor: 0.3  # Eye tracking smoothness
+
+# Proactive Behavior
+proactive:
+  enabled: true
+
+  monitoring:
+    motion_detection: true
+    face_detection: true
+    frustration_detection: true  # Posture/attention analysis
+    interval: 2000  # ms between checks
+
+  triggers:
+    tim_arrival:
+      enabled: true
+      greeting: "Morning. How's the chaos today?"
+
+    planning_time:
+      enabled: true
+      day: "Thursday"
+      time: "14:00"
+      message: "It's 2pm. Want Friday's schedule?"
+
+    stranger_detected:
+      enabled: true
+      message: "Can I help you?"
+
+    frustration_detected:
+      enabled: true
+      threshold: 10000  # ms of no movement before asking
+      message: "You okay? Need something?"
+
+# Expression Configuration
+expressions:
+  default: "idle"
+  blink_interval: 8000  # ms
+  transition_speed: 300  # ms for smooth transitions
+
+  # Load detailed expressions from expressions.yaml
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "/Gary/GairiHead/logs/gairi_head.log"
+  console: true
+  max_size: "10MB"
+  backup_count: 5
+
+# Performance
+performance:
+  low_power_mode: false
+  idle_timeout: 300000  # ms before entering low power (5 min)
+  camera_fps_idle: 1    # Reduce FPS when idle
+  eye_brightness_idle: 128  # Dim eyes when idle (0-255)

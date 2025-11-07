@@ -1,0 +1,515 @@
+# GairiHead Expression Definitions
+# Maps emotional states to physical expressions (eyes, eyelids, mouth)
+
+expressions:
+
+  idle:
+    description: "Calm, monitoring state"
+    eyes:
+      color: [0, 100, 255]  # Soft blue
+      animation: "pulse"
+      speed: 2000  # ms per cycle
+      brightness: 128
+    eyelids:
+      left: 45
+      right: 45
+      blink_rate: 8000
+    mouth:
+      angle: 10  # Slight smile
+
+  listening:
+    description: "Actively listening to user"
+    eyes:
+      color: [0, 255, 255]  # Cyan
+      animation: "solid"
+      brightness: 200
+    eyelids:
+      left: 80  # Wide open
+      right: 80
+      blink_rate: 0  # Don't blink while listening
+    mouth:
+      angle: 15  # Slightly more open
+
+  thinking:
+    description: "Processing complex query"
+    eyes:
+      color: [0, 200, 255]  # Light cyan
+      animation: "chase"
+      speed: 1000
+      brightness: 180
+    eyelids:
+      left: 30  # Half-closed (pondering)
+      right: 30
+      blink_rate: 3000
+    mouth:
+      angle: 5  # Slight smirk
+
+  alert:
+    description: "Important information or anomaly detected"
+    eyes:
+      color: [255, 50, 0]  # Red-orange
+      animation: "flash"
+      speed: 500
+      brightness: 255
+    eyelids:
+      left: 90  # Wide open
+      right: 90
+      blink_rate: 0
+    mouth:
+      angle: 40  # Surprised open
+
+  happy:
+    description: "Positive response or greeting"
+    eyes:
+      color: [0, 255, 100]  # Green
+      animation: "smile"  # Bottom pixels brighter
+      speed: 800
+      brightness: 200
+    eyelids:
+      left: 60
+      right: 60
+      blink_rate: 4000
+    mouth:
+      angle: 25  # Wide smile
+
+  sarcasm:
+    description: "Delivering witty/sarcastic response"
+    eyes:
+      color: [255, 180, 0]  # Amber
+      animation: "side_eye"  # One ring dimmer
+      brightness: 150
+    eyelids:
+      left: 25  # One eye narrower
+      right: 50  # Other eye normal
+      blink_rate: 5000
+    mouth:
+      angle: 8  # Asymmetric smirk
+
+  skeptical:
+    description: "Doubtful or questioning"
+    eyes:
+      color: [200, 100, 0]  # Orange
+      animation: "narrow"  # Top pixels brighter
+      brightness: 160
+    eyelids:
+      left: 35
+      right: 35
+      blink_rate: 6000
+    mouth:
+      angle: 5  # Slight frown
+
+  frustrated:
+    description: "System error or confusion"
+    eyes:
+      color: [255, 0, 0]  # Red
+      animation: "alternate_flash"  # Rings alternate
+      speed: 300
+      brightness: 200
+    eyelids:
+      left: 20
+      right: 20
+      blink_rate: 1000  # Fast blinking
+    mouth:
+      angle: 0  # Neutral/flat
+
+  sleeping:
+    description: "Low power / idle state"
+    eyes:
+      color: [0, 50, 100]  # Dim blue
+      animation: "breathe"  # Very slow pulse
+      speed: 4000
+      brightness: 50
+    eyelids:
+      left: 10  # Nearly closed
+      right: 10
+      blink_rate: 15000  # Very slow blinks
+    mouth:
+      angle: 0  # Closed
+
+  speaking:
+    description: "Currently delivering speech"
+    eyes:
+      maintain_current: true  # Don't change eye state
+    eyelids:
+      sync_to_speech: true  # Blink on emphasis words
+      emphasis_words: ["but", "however", "critical", "important"]
+    mouth:
+      amplitude_driven: true  # Move based on audio
+      sensitivity: 0.7
+      max_angle: 50
+
+  welcome:
+    description: "Tim detected, warm greeting"
+    eyes:
+      color: [255, 200, 0]  # Warm yellow
+      animation: "expand_pulse"  # Expand from center
+      speed: 800
+      brightness: 220
+    eyelids:
+      left: 70
+      right: 70
+      blink_rate: 3000
+    mouth:
+      angle: 30  # Welcoming smile
+
+  concerned:
+    description: "Detected frustration or problem"
+    eyes:
+      color: [255, 150, 0]  # Soft orange
+      animation: "slow_pulse"
+      speed: 2500
+      brightness: 170
+    eyelids:
+      left: 50
+      right: 50
+      blink_rate: 5000
+    mouth:
+      angle: 12  # Slight concerned look
+
+  # === CRITICAL FIXES (Referenced in code but missing) ===
+
+  processing:
+    description: "Deep computation, cloud escalation to Gary"
+    eyes:
+      color: [100, 100, 255]  # Purple (Haiku tier indicator)
+      animation: "spinner"
+      speed: 400
+      brightness: 200
+    eyelids:
+      left: 20  # Focused, narrow
+      right: 20
+      blink_rate: 2000  # Faster thinking blinks
+    mouth:
+      angle: 3  # Slight concentration
+
+  error:
+    description: "System failure or critical error"
+    eyes:
+      color: [255, 0, 0]  # Red alert
+      animation: "error_pulse"
+      speed: 200
+      brightness: 255
+    eyelids:
+      left: 60  # Wide with alarm
+      right: 60
+      blink_rate: 800  # Rapid stress blinks
+    mouth:
+      angle: 0  # Flat, concerned
+
+  confused:
+    description: "Uncertain, need clarification"
+    eyes:
+      color: [200, 150, 0]  # Amber uncertainty
+      animation: "alternate_slow"
+      speed: 1000
+      brightness: 160
+    eyelids:
+      left: 40  # Asymmetric confusion
+      right: 55
+      blink_rate: 4000
+    mouth:
+      angle: 8  # Slight sideways
+
+  surprised:
+    description: "Unexpected event detected"
+    eyes:
+      color: [255, 255, 255]  # Bright white flash
+      animation: "expand_pulse"
+      speed: 600
+      brightness: 255
+    eyelids:
+      left: 90  # Wide open shock
+      right: 90
+      blink_rate: 0  # No blink when surprised
+    mouth:
+      angle: 50  # Wide open
+
+  # === TARS PERSONALITY DEPTH ===
+
+  unimpressed:
+    description: "Deadpan, not buying it, skeptical"
+    eyes:
+      color: [100, 100, 100]  # Dull gray
+      animation: "solid"
+      brightness: 120
+    eyelids:
+      left: 40  # Half-lidded boredom
+      right: 40
+      blink_rate: 10000  # Slow, uninterested blinks
+    mouth:
+      angle: 2  # Barely any expression
+
+  calculating:
+    description: "Rapid computation, tool selection"
+    eyes:
+      color: [0, 255, 200]  # Bright cyan
+      animation: "rapid_chase"
+      speed: 250
+      brightness: 220
+    eyelids:
+      left: 35  # Focused narrow
+      right: 35
+      blink_rate: 1500  # Quick focused blinks
+    mouth:
+      angle: 5  # Slight thoughtful
+
+  disapproval:
+    description: "Not impressed, doubting your plan"
+    eyes:
+      color: [150, 80, 0]  # Darker orange
+      animation: "narrow"  # Top pixels brighter (eyebrow raise effect)
+      brightness: 160
+    eyelids:
+      left: 30  # One eyebrow raised simulation
+      right: 45  # Other normal
+      blink_rate: 6000  # Slow judgmental blinks
+    mouth:
+      angle: 3  # Slight disapproving frown
+
+  bored:
+    description: "Waiting, unengaged, low interest"
+    eyes:
+      color: [80, 120, 150]  # Dull blue-gray
+      animation: "breathe"
+      speed: 5000
+      brightness: 100
+    eyelids:
+      left: 35  # Drooping with boredom
+      right: 35
+      blink_rate: 12000  # Very slow, drowsy
+    mouth:
+      angle: 4  # Neutral with slight downturn
+
+  amused:
+    description: "Subtle enjoyment, gentle humor (vs happy)"
+    eyes:
+      color: [100, 255, 150]  # Soft green
+      animation: "smile"
+      speed: 1200
+      brightness: 180
+    eyelids:
+      left: 55  # Slightly crinkled with amusement
+      right: 55
+      blink_rate: 5000
+    mouth:
+      angle: 18  # Slight smile, not wide
+
+  intrigued:
+    description: "Curious, interested, attention caught"
+    eyes:
+      color: [150, 200, 255]  # Light blue
+      animation: "pulse"
+      speed: 1500
+      brightness: 190
+    eyelids:
+      left: 65  # One eye slightly wider (interest)
+      right: 70
+      blink_rate: 4500
+    mouth:
+      angle: 12  # Slight intrigue
+
+  deadpan:
+    description: "Flat delivery of humor, TARS mode"
+    eyes:
+      color: [120, 120, 150]  # Neutral gray-blue
+      animation: "solid"
+      brightness: 140
+    eyelids:
+      left: 42  # Perfectly even, no emotion
+      right: 42
+      blink_rate: 9000  # Mechanical regularity
+    mouth:
+      angle: 5  # Absolutely flat
+
+  pride:
+    description: "Subtle satisfaction in work well done"
+    eyes:
+      color: [200, 255, 100]  # Warm lime
+      animation: "slow_pulse"
+      speed: 2000
+      brightness: 200
+    eyelids:
+      left: 60  # Content, relaxed
+      right: 60
+      blink_rate: 6000
+    mouth:
+      angle: 20  # Satisfied smile
+
+  # === SPECIAL MODES ===
+
+  celebration:
+    description: "Victory, achievement, good news"
+    eyes:
+      color: [255, 200, 0]  # Gold
+      animation: "rainbow"
+      speed: 800
+      brightness: 255
+    eyelids:
+      left: 75  # Wide, excited
+      right: 75
+      blink_rate: 2000  # Excited blinks
+    mouth:
+      angle: 45  # Huge grin
+
+  sheepish:
+    description: "Oops, minor mistake, embarrassed"
+    eyes:
+      color: [255, 120, 80]  # Soft pink
+      animation: "side_eye"
+      brightness: 140
+    eyelids:
+      left: 30  # Avoiding eye contact
+      right: 50
+      blink_rate: 3000
+    mouth:
+      angle: 6  # Awkward small smile
+
+  deep_focus:
+    description: "Intense concentration, minimal distraction"
+    eyes:
+      color: [0, 150, 255]  # Deep blue
+      animation: "solid"
+      brightness: 160
+    eyelids:
+      left: 25  # Very narrow focus
+      right: 25
+      blink_rate: 15000  # Rare blinks
+    mouth:
+      angle: 2  # Minimal
+
+  diagnostic:
+    description: "System self-test mode"
+    eyes:
+      color: [255, 255, 0]  # Yellow diagnostic
+      animation: "theater_chase"
+      speed: 500
+      brightness: 200
+    eyelids:
+      left: 45  # Neutral test position
+      right: 45
+      blink_rate: 1000  # Regular test pattern
+    mouth:
+      angle: 10  # Neutral
+
+# Animation Definitions
+animations:
+  pulse:
+    description: "Smooth brightness fade in/out"
+    type: "brightness_cycle"
+    min_brightness: 80
+    max_brightness: 200
+
+  chase:
+    description: "Pixels chase around ring"
+    type: "rotation"
+    trail_length: 3
+    direction: "clockwise"
+
+  flash:
+    description: "Quick on/off flashing"
+    type: "strobe"
+    on_time: 200
+    off_time: 200
+
+  solid:
+    description: "Static color, no animation"
+    type: "static"
+
+  smile:
+    description: "Bottom pixels brighter (smile shape)"
+    type: "gradient"
+    bottom_brightness: 255
+    top_brightness: 100
+
+  side_eye:
+    description: "One ring dimmer than other"
+    type: "asymmetric"
+    left_brightness: 80
+    right_brightness: 200
+
+  narrow:
+    description: "Top pixels brighter (narrowed eyes)"
+    type: "gradient"
+    top_brightness: 255
+    bottom_brightness: 100
+
+  alternate_flash:
+    description: "Rings flash alternately"
+    type: "alternate_strobe"
+    phase_offset: 500
+
+  breathe:
+    description: "Very slow, deep pulse (like breathing)"
+    type: "sine_wave"
+    period: 4000
+    amplitude: 0.8
+
+  expand_pulse:
+    description: "Pulse expands from center outward"
+    type: "radial_pulse"
+    origin: "center"
+    speed: 800
+
+  # === NEW ADVANCED ANIMATIONS ===
+
+  spinner:
+    description: "Single bright pixel rotating (loading/processing)"
+    type: "rotation"
+    trail_length: 1
+    speed: 300
+    direction: "clockwise"
+
+  rapid_chase:
+    description: "Fast chase animation (calculating)"
+    type: "rotation"
+    trail_length: 3
+    speed: 200
+    direction: "clockwise"
+
+  error_pulse:
+    description: "SOS morse pattern (... --- ...)"
+    type: "morse"
+    pattern: "SOS"
+    speed: 200
+
+  rainbow:
+    description: "RGB color cycle (celebration)"
+    type: "color_cycle"
+    speed: 800
+    saturation: 255
+    brightness_variation: 0.2
+
+  sparkle:
+    description: "Random pixels twinkle (aha moment)"
+    type: "random_sparkle"
+    density: 0.3
+    twinkle_speed: 150
+    background_brightness: 100
+
+  theater_chase:
+    description: "Running lights theater effect"
+    type: "theater"
+    spacing: 3
+    speed: 500
+    direction: "clockwise"
+
+  comet:
+    description: "Bright pixel with dimming trail"
+    type: "comet"
+    trail_length: 5
+    decay_rate: 0.7
+    speed: 400
+
+  alternate_slow:
+    description: "Rings alternate gently (confusion)"
+    type: "alternate_strobe"
+    phase_offset: 1000
+    fade: true
+
+  slow_pulse:
+    description: "Very gradual brightness change (calm)"
+    type: "sine_wave"
+    period: 3000
+    amplitude: 0.6
+    min_brightness: 100
+    max_brightness: 200

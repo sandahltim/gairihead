@@ -1,0 +1,63 @@
+# GaryHead - Physical Robot Requirements
+# Python 3.11+ on Raspberry Pi 5
+
+# Core Dependencies
+pyyaml>=6.0.1
+loguru>=0.7.2
+python-dotenv>=1.0.0
+
+# Hardware Control
+RPi.GPIO>=0.7.1
+pigpio>=1.78
+adafruit-circuitpython-neopixel>=6.3.11
+gpiozero>=2.0.1
+
+# Vision
+opencv-python>=4.8.1
+picamera2>=0.3.17
+face-recognition>=1.3.0
+numpy>=1.24.3
+pillow>=10.1.0
+
+# Voice - Wake Word
+pvporcupine>=3.0.0  # Wake word detection
+# Alternative: pocketsphinx>=5.0.2
+
+# Voice - STT/TTS
+openai-whisper>=20231117  # Speech-to-text
+piper-tts>=1.2.0  # Text-to-speech (local)
+pyaudio>=0.2.14
+sounddevice>=0.4.6
+soundfile>=0.12.1
+wave>=0.0.2
+
+# LLM Integration
+ollama-python>=0.1.6  # Local LLM (Llama 3.2 3B)
+anthropic>=0.18.1  # Claude Haiku (via main Gary)
+websockets>=12.0  # Async websocket library
+websocket-client>=1.7.0  # Sync websocket client for Gary connection
+
+# Communication
+pyserial>=3.5  # UART to Pico
+python-socketio>=5.10.0
+sounddevice>=0.4.6  # Audio recording
+soundfile>=0.12.1  # Audio file I/O
+
+# Utilities
+requests>=2.31.0
+aiohttp>=3.9.1
+asyncio>=3.4.3
+dataclasses-json>=0.6.3
+
+# Development/Testing
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+black>=23.12.0
+flake8>=6.1.0
+
+# Optional - Enhanced TTS
+# elevenlabs>=0.2.27  # Cloud TTS (better quality, costs money)
+# gtts>=2.5.0  # Google TTS (free, requires internet)
+
+# Note: Some packages require system dependencies
+# See docs/SOFTWARE_SETUP.md for installation guide
