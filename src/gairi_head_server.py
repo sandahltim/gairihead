@@ -283,11 +283,31 @@ class GairiHeadServer:
         """Get GairiHead current status"""
         logger.info("Getting status...")
 
+        # Test camera availability (without full init)
+        camera_available = False
+        try:
+            import cv2
+            test_cap = cv2.VideoCapture(0)
+            if test_cap.isOpened():
+                ret, _ = test_cap.read()
+                camera_available = ret
+            test_cap.release()
+        except Exception as e:
+            logger.warning(f"Camera test failed: {e}")
+        
+        # Test servo availability (GPIO check)
+        servos_available = False
+        try:
+            import RPi.GPIO as GPIO
+            servos_available = True  # If import works, GPIO available
+        except Exception:
+            pass
+
         status = {
             'expression': self.current_expression,
-            'camera_available': self.camera_manager is not None,
-            'servos_available': self.servo_controller is not None,
-            'uptime': time.time(),  # Would need to track start time
+            'camera_available': camera_available,
+            'servos_available': servos_available,
+            'uptime': time.time(),
             'timestamp': time.time()
         }
 
@@ -300,7 +320,6 @@ class GairiHeadServer:
             'status': 'success',
             'data': status
         }
-
     async def _handle_set_expression(self, params: Dict) -> Dict:
         """Set facial expression"""
         expression = params.get('expression', 'idle')
