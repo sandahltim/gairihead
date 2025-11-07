@@ -37,16 +37,18 @@ from typing import Optional, Dict, Tuple
 class VoiceHandler:
     """Manages complete voice interaction pipeline"""
 
-    def __init__(self, config, llm_tier_manager=None):
+    def __init__(self, config, llm_tier_manager=None, arduino_display=None):
         """
         Initialize voice handler
 
         Args:
             config: Configuration dict from gairi_head.yaml
             llm_tier_manager: LLMTierManager instance for query processing
+            arduino_display: ArduinoDisplay instance for visual feedback
         """
         self.config = config.get('voice', {})
         self.llm_manager = llm_tier_manager
+        self.arduino_display = arduino_display
 
         # Microphone settings
         self.sample_rate = self.config.get('microphone', {}).get('sample_rate', 16000)
@@ -200,18 +202,26 @@ class VoiceHandler:
             self.stats['tts_failures'] += 1
             return False
 
-    def process_voice_query(self, duration: float = 3.0, authorization: Optional[Dict] = None) -> Optional[str]:
+    def process_voice_query(self, duration: float = 3.0, authorization: Optional[Dict] = None, expression: str = 'listening') -> Optional[str]:
         """
         Complete voice interaction: record → transcribe → query → speak
 
         Args:
             duration: Recording duration in seconds
             authorization: Authorization context for LLM query
+            expression: Current expression state (for display)
 
         Returns:
             Response text or None if failed
         """
         start_time = time.time()
+
+        # Update display: listening state
+        if self.arduino_display and self.arduino_display.connected:
+            self.arduino_display.update_status(
+                state="listening",
+                expression=expression
+            )
 
         # Step 1: Record audio
         audio = self.record_audio(duration)
@@ -226,6 +236,7 @@ class VoiceHandler:
             return None
 
         # Step 3: Query LLM
+        tier = "local"
         if self.llm_manager is None:
             logger.warning("No LLM manager configured, returning transcription only")
             response_text = f"I heard: {text}"
@@ -235,13 +246,27 @@ class VoiceHandler:
                 result = self.llm_manager.query(text, authorization=authorization)
                 if result and result.get('response'):
                     response_text = result['response']
-                    logger.success(f"✅ Got response from {result.get('tier', 'unknown')} tier")
+                    tier = result.get('tier', 'local')
+                    logger.success(f"✅ Got response from {tier} tier")
                 else:
                     logger.error("❌ LLM query returned no response")
                     response_text = "Sorry, I didn't get a response."
             except Exception as e:
                 logger.error(f"❌ LLM query failed: {e}")
                 response_text = "Sorry, something went wrong."
+
+        # Calculate response time
+        response_time = time.time() - start_time
+
+        # Update display: show conversation
+        if self.arduino_display and self.arduino_display.connected:
+            self.arduino_display.show_conversation(
+                user_text=text,
+                gairi_text=response_text,
+                expression=expression,
+                tier=tier,
+                response_time=response_time
+            )
 
         # Step 4: Speak response
         self.speak(response_text)

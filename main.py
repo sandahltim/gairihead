@@ -73,7 +73,9 @@ class GairiHeadAssistant:
         # 1. Camera Manager
         try:
             logger.info("1. Initializing camera...")
-            self.camera = CameraManager(self.config)
+            # CameraManager expects config_path, not config dict
+            # Pass None to use default config path
+            self.camera = CameraManager(config_path=None)
             if self.camera.initialize():
                 logger.success("✅ Camera initialized")
             else:

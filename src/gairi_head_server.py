@@ -58,6 +58,7 @@ class GairiHeadServer:
         # Hardware managers (lazy init)
         self.camera_manager = None
         self.servo_controller = None
+        self.arduino_display = None
 
         # Status
         self.is_running = False
@@ -80,6 +81,27 @@ class GairiHeadServer:
             self.servo_controller = ServoController()
             logger.info("Servo controller initialized")
         return self.servo_controller
+
+    def _get_arduino_display(self):
+        """Lazy init Arduino display"""
+        if self.arduino_display is None:
+            try:
+                from arduino_display import ArduinoDisplay
+                # Try to connect to Arduino (USB connection)
+                display_config = self.config.get('arduino_display', {})
+                port = display_config.get('port', '/dev/ttyACM0')
+                enabled = display_config.get('enabled', True)
+                self.arduino_display = ArduinoDisplay(port=port, enabled=enabled)
+                if self.arduino_display.connected:
+                    logger.info("Arduino display initialized")
+                else:
+                    logger.warning("Arduino display not connected")
+            except Exception as e:
+                logger.warning(f"Arduino display initialization failed: {e}")
+                # Create disabled instance to prevent repeated init attempts
+                from arduino_display import ArduinoDisplay
+                self.arduino_display = ArduinoDisplay(enabled=False)
+        return self.arduino_display
 
     async def handle_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -283,45 +305,11 @@ class GairiHeadServer:
         """Get GairiHead current status"""
         logger.info("Getting status...")
 
-        # Test camera availability (without full init)
-        camera_available = False
-        try:
-            import cv2
-            test_cap = cv2.VideoCapture(0)
-            if test_cap.isOpened():
-                ret, _ = test_cap.read()
-                camera_available = ret
-            test_cap.release()
-        except Exception as e:
-            logger.warning(f"Camera test failed: {e}")
-        
-        # Test microphone availability
-        microphone_available = False
-        try:
-            import sounddevice as sd
-            # Quick test: try to query devices
-            devices = sd.query_devices()
-            # Check if there's at least one input device
-            default_input = sd.query_devices(kind="input")
-                if isinstance(dev, dict) and dev.get('max_input_channels', 0) > 0:
-                    microphone_available = True
-        except Exception as e:
-            logger.warning(f"Microphone test failed: {e}")
-        
-        # Test servo availability (GPIO check)
-        servos_available = False
-        try:
-            import RPi.GPIO as GPIO
-            servos_available = True  # If import works, GPIO available
-        except Exception:
-            pass
-
         status = {
             'expression': self.current_expression,
-            'camera_available': camera_available,
-            'microphone_available': microphone_available,
-            'servos_available': servos_available,
-            'uptime': time.time(),
+            'camera_available': self.camera_manager is not None,
+            'servos_available': self.servo_controller is not None,
+            'uptime': time.time(),  # Would need to track start time
             'timestamp': time.time()
         }
 
@@ -334,6 +322,7 @@ class GairiHeadServer:
             'status': 'success',
             'data': status
         }
+
     async def _handle_set_expression(self, params: Dict) -> Dict:
         """Set facial expression"""
         expression = params.get('expression', 'idle')
@@ -343,6 +332,17 @@ class GairiHeadServer:
             servos = self._get_servos()
             servos.set_expression(expression)
             self.current_expression = expression
+
+            # Update Arduino display with new expression
+            display = self._get_arduino_display()
+            if display and display.connected:
+                display.update_status(
+                    user=params.get('user', 'unknown'),
+                    level=params.get('level', 3),
+                    state=params.get('state', 'idle'),
+                    confidence=params.get('confidence', 0.0),
+                    expression=expression
+                )
 
             return {
                 'status': 'success',
@@ -357,7 +357,7 @@ class GairiHeadServer:
                 'error': f'Failed to set expression: {e}'
             }
 
-    async def handle_client(self, websocket):
+    async def handle_client(self, websocket, path):
         """Handle websocket client connection"""
         client_addr = websocket.remote_address
         logger.info(f"Client connected: {client_addr}")
@@ -402,6 +402,8 @@ class GairiHeadServer:
             self.camera_manager.release()
         if self.servo_controller:
             self.servo_controller.cleanup()
+        if self.arduino_display:
+            self.arduino_display.close()
         logger.info("GairiHead server cleaned up")
 
 

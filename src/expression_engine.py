@@ -41,6 +41,7 @@ class ExpressionEngine:
         # Hardware controllers (initialized externally)
         self.servo_controller = None
         self.neopixel_controller = None
+        self.arduino_display = None
 
         # State tracking
         self.is_speaking = False
@@ -98,13 +99,14 @@ class ExpressionEngine:
             self.expressions = expr_config['expressions']
             self.transition_speed = expr_config.get('transition_speed', 300) / 1000.0
 
-    def set_controllers(self, servo_controller=None, neopixel_controller=None):
+    def set_controllers(self, servo_controller=None, neopixel_controller=None, arduino_display=None):
         """
         Set hardware controllers
 
         Args:
             servo_controller: ServoController instance
             neopixel_controller: NeoPixelController instance
+            arduino_display: ArduinoDisplay instance
         """
         if servo_controller:
             self.servo_controller = servo_controller
@@ -113,6 +115,10 @@ class ExpressionEngine:
         if neopixel_controller:
             self.neopixel_controller = neopixel_controller
             logger.debug("NeoPixel controller attached")
+
+        if arduino_display:
+            self.arduino_display = arduino_display
+            logger.debug("Arduino display attached")
 
     def set_expression(self, expression_name, force=False, trigger_quirks=True):
         """
@@ -153,35 +159,44 @@ class ExpressionEngine:
 
             return True
 
+    def _get_current_state(self):
+        """Get current system state as string"""
+        if self.is_speaking:
+            return "speaking"
+        elif self.is_listening:
+            return "listening"
+        else:
+            return self.current_expression
+
     def _apply_expression(self):
         """Apply current expression to hardware"""
         expr = self.expressions[self.current_expression]
 
-        # Servos - handle nested structure from YAML
+        # Servos
         if self.servo_controller:
-            # Eyelids (from eyelids: {left: X, right: Y})
-            if "eyelids" in expr:
-                eyelids = expr["eyelids"]
-                if "left" in eyelids:
-                    self.servo_controller.set_left_eyelid(eyelids["left"])
-                if "right" in eyelids:
-                    self.servo_controller.set_right_eyelid(eyelids["right"])
-
-            # Mouth (from mouth: {angle: X})
-            if "mouth" in expr:
-                mouth = expr["mouth"]
-                if isinstance(mouth, dict) and "angle" in mouth:
-                    self.servo_controller.set_mouth(mouth["angle"])
-                elif isinstance(mouth, (int, float)):
-                    self.servo_controller.set_mouth(mouth)
+            if 'left_eyelid' in expr:
+                self.servo_controller.set_left_eyelid(expr['left_eyelid'])
+            if 'right_eyelid' in expr:
+                self.servo_controller.set_right_eyelid(expr['right_eyelid'])
+            if 'mouth' in expr:
+                self.servo_controller.set_mouth(expr['mouth'])
 
         # NeoPixels
-        if self.neopixel_controller and "eyes" in expr:
-            eye_color = expr["eyes"]
+        if self.neopixel_controller and 'eyes' in expr:
+            eye_color = expr['eyes']
             if isinstance(eye_color, list) and len(eye_color) == 3:
                 self.neopixel_controller.set_color(eye_color)
             elif isinstance(eye_color, str):
+                # Named color or animation
                 self.neopixel_controller.set_animation(eye_color)
+
+        # Arduino Display
+        if self.arduino_display and self.arduino_display.connected:
+            # Send expression update to display
+            self.arduino_display.update_status(
+                expression=self.current_expression,
+                state=self._get_current_state()
+            )
 
     def start_speaking(self):
         """Indicate GairiHead is speaking"""
