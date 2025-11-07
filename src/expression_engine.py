@@ -157,22 +157,30 @@ class ExpressionEngine:
         """Apply current expression to hardware"""
         expr = self.expressions[self.current_expression]
 
-        # Servos
+        # Servos - handle nested structure from YAML
         if self.servo_controller:
-            if 'left_eyelid' in expr:
-                self.servo_controller.set_left_eyelid(expr['left_eyelid'])
-            if 'right_eyelid' in expr:
-                self.servo_controller.set_right_eyelid(expr['right_eyelid'])
-            if 'mouth' in expr:
-                self.servo_controller.set_mouth(expr['mouth'])
+            # Eyelids (from eyelids: {left: X, right: Y})
+            if "eyelids" in expr:
+                eyelids = expr["eyelids"]
+                if "left" in eyelids:
+                    self.servo_controller.set_left_eyelid(eyelids["left"])
+                if "right" in eyelids:
+                    self.servo_controller.set_right_eyelid(eyelids["right"])
+
+            # Mouth (from mouth: {angle: X})
+            if "mouth" in expr:
+                mouth = expr["mouth"]
+                if isinstance(mouth, dict) and "angle" in mouth:
+                    self.servo_controller.set_mouth(mouth["angle"])
+                elif isinstance(mouth, (int, float)):
+                    self.servo_controller.set_mouth(mouth)
 
         # NeoPixels
-        if self.neopixel_controller and 'eyes' in expr:
-            eye_color = expr['eyes']
+        if self.neopixel_controller and "eyes" in expr:
+            eye_color = expr["eyes"]
             if isinstance(eye_color, list) and len(eye_color) == 3:
                 self.neopixel_controller.set_color(eye_color)
             elif isinstance(eye_color, str):
-                # Named color or animation
                 self.neopixel_controller.set_animation(eye_color)
 
     def start_speaking(self):

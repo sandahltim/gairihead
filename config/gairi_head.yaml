@@ -68,12 +68,12 @@ voice:
     volume: 0.8
 
   microphone:
-    device_index: 0    # Default USB mic
+    device_index: 1    # EMEET OfficeCore M0 Plus
     sample_rate: 16000
     chunk_size: 1024
 
   speaker:
-    device_index: 0    # Default USB speaker
+    device_index: 1    # EMEET OfficeCore M0 Plus
     volume: 0.8
 
 # Vision Configuration

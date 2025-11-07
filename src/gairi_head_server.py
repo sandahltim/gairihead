@@ -295,6 +295,19 @@ class GairiHeadServer:
         except Exception as e:
             logger.warning(f"Camera test failed: {e}")
         
+        # Test microphone availability
+        microphone_available = False
+        try:
+            import sounddevice as sd
+            # Quick test: try to query devices
+            devices = sd.query_devices()
+            # Check if there's at least one input device
+            default_input = sd.query_devices(kind="input")
+                if isinstance(dev, dict) and dev.get('max_input_channels', 0) > 0:
+                    microphone_available = True
+        except Exception as e:
+            logger.warning(f"Microphone test failed: {e}")
+        
         # Test servo availability (GPIO check)
         servos_available = False
         try:
@@ -306,6 +319,7 @@ class GairiHeadServer:
         status = {
             'expression': self.current_expression,
             'camera_available': camera_available,
+            'microphone_available': microphone_available,
             'servos_available': servos_available,
             'uptime': time.time(),
             'timestamp': time.time()

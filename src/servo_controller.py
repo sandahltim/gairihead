@@ -14,8 +14,8 @@ import time
 import math
 import random
 import threading
-from gpiozero import Servo
-from gpiozero.pins.pigpio import PiGPIOFactory
+from gpiozero import Servo, Device
+from gpiozero.pins.lgpio import LGPIOFactory
 from loguru import logger
 import yaml
 from pathlib import Path
@@ -28,11 +28,13 @@ class ServoController:
         """Initialize servos with config"""
         self.config = self._load_config(config_path)
 
-        # Use pigpio for better servo control (more precise PWM)
+        # Use lgpio for Pi 5 (native GPIO library)
         try:
-            factory = PiGPIOFactory()
+            Device.pin_factory = LGPIOFactory()
+            factory = Device.pin_factory
+            logger.info("Using lgpio pin factory (Pi 5 native)")
         except Exception as e:
-            logger.warning(f"pigpio not available, using default: {e}")
+            logger.warning(f"lgpio not available, using default: {e}")
             factory = None
 
         # Initialize servos
