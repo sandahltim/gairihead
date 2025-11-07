@@ -79,6 +79,15 @@ enum DisplayView {
 DisplayView currentView = VIEW_CONVERSATION;
 
 // =============================================================================
+// TOUCH BUTTON STRUCTURE
+// =============================================================================
+
+struct TouchButton {
+  int x, y, w, h;
+  String action;
+};
+
+// =============================================================================
 // STATE VARIABLES
 // =============================================================================
 
@@ -112,24 +121,24 @@ const unsigned int maxBufferSize = 1024;
 // =============================================================================
 
 String expressionToEmoji(String expr) {
-  if (expr == "happy") return ":)";
-  if (expr == "amused") return ":D";
-  if (expr == "sarcasm") return ";)";
-  if (expr == "deadpan") return ":|";
-  if (expr == "unimpressed") return "-_-";
-  if (expr == "disapproval") return ":/";
-  if (expr == "calculating") return "o.O";
-  if (expr == "thinking") return "...";
-  if (expr == "processing") return "(*_*)";
-  if (expr == "alert") return "!";
-  if (expr == "concern") return ":(";
-  if (expr == "frustrated") return ">:(";
-  if (expr == "confused") return "???";
-  if (expr == "sheepish") return "^_^;";
-  if (expr == "pride") return "^_^";
-  if (expr == "celebration") return "\\o/";
-  if (expr == "listening") return "<ear>";
-  return "o_o"; // idle/unknown
+  if (expr == "happy") return F(":)");
+  if (expr == "amused") return F(":D");
+  if (expr == "sarcasm") return F(";)");
+  if (expr == "deadpan") return F(":|");
+  if (expr == "unimpressed") return F("-_-");
+  if (expr == "disapproval") return F(":/");
+  if (expr == "calculating") return F("o.O");
+  if (expr == "thinking") return F("...");
+  if (expr == "processing") return F("(*_*)");
+  if (expr == "alert") return F("!");
+  if (expr == "concern") return F(":(");
+  if (expr == "frustrated") return F(">:(");
+  if (expr == "confused") return F("???");
+  if (expr == "sheepish") return F("^_^;");
+  if (expr == "pride") return F("^_^");
+  if (expr == "celebration") return F("\\o/");
+  if (expr == "listening") return F("<ear>");
+  return F("o_o");
 }
 
 // =============================================================================
@@ -210,11 +219,6 @@ void drawButton(int x, int y, int w, int h, String label, uint16_t bgColor, uint
 // =============================================================================
 // TOUCH DETECTION
 // =============================================================================
-
-struct TouchButton {
-  int x, y, w, h;
-  String action;
-};
 
 // Touch buttons at bottom
 TouchButton btnLeft = {10, 280, 70, 35, "View"};
@@ -468,9 +472,7 @@ void handleJsonMessage(String json) {
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
-    Serial.print("{\"error\": \"JSON parse failed: ");
-    Serial.print(error.c_str());
-    Serial.println("\"}");
+    Serial.println(F("{\"error\":\"parse\"}"));
     return;
   }
 
@@ -489,39 +491,35 @@ void handleJsonMessage(String json) {
       drawConversationView();
     }
 
-    Serial.println("{\"status\": \"conversation_updated\"}");
+    Serial.println(F("{\"ok\":1}"));
 
   } else if (strcmp(type, "status") == 0) {
-    // Update status data
     userName = doc["user"].as<String>();
     authLevel = doc["level"] | 3;
     systemState = doc["state"].as<String>();
     confidence = doc["confidence"] | 0.0;
     expression = doc["expression"].as<String>();
 
-    // Redraw if on status view
     if (currentView == VIEW_STATUS) {
       drawStatusView();
     }
 
-    Serial.println("{\"status\": \"status_updated\"}");
+    Serial.println(F("{\"ok\":1}"));
 
   } else if (strcmp(type, "debug") == 0) {
-    // Update debug data
     tier = doc["tier"].as<String>();
     lastTool = doc["tool"].as<String>();
     trainingLogged = doc["training_logged"] | false;
     responseTime = doc["response_time"] | 0.0;
 
-    // Redraw if on debug view
     if (currentView == VIEW_DEBUG) {
       drawDebugView();
     }
 
-    Serial.println("{\"status\": \"debug_updated\"}");
+    Serial.println(F("{\"ok\":1}"));
 
   } else {
-    Serial.println("{\"error\": \"Unknown message type\"}");
+    Serial.println(F("{\"error\":\"type\"}"));
   }
 }
 
@@ -558,17 +556,7 @@ void handleTouch() {
     nextView();
 
   } else if (isTouchInButton(p, btnCenter)) {
-    // Center button action depends on current view
-    if (currentView == VIEW_CONVERSATION) {
-      // Demo mode
-      Serial.println("{\"action\": \"demo_mode\"}");
-    } else if (currentView == VIEW_STATUS) {
-      // Guest mode (1 hour)
-      Serial.println("{\"action\": \"guest_mode\", \"duration\": 3600}");
-    } else if (currentView == VIEW_DEBUG) {
-      // Demo mode
-      Serial.println("{\"action\": \"demo_mode\"}");
-    }
+    // Reserved for future use
   }
 }
 
@@ -585,30 +573,22 @@ void setup() {
 
   // Initialize TFT
   tft.begin();
-  tft.setRotation(0); // Portrait mode
+  tft.setRotation(0);
   tft.fillScreen(COLOR_BG);
 
   // Welcome message
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TITLE);
-  tft.setCursor(30, 100);
-  tft.print("GairiHead");
+  tft.setCursor(30, 140);
+  tft.print(F("GairiHead"));
 
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(40, 140);
-  tft.print("Display Ready");
-
-  tft.setCursor(20, 170);
-  tft.print("Waiting for Pi...");
-
-  delay(2000);
+  delay(1000);
 
   // Show initial view
   switchView(VIEW_CONVERSATION);
 
   // Send ready signal
-  Serial.println("{\"status\": \"ready\"}");
+  Serial.println(F("{\"ok\":1}"));
 }
 
 // =============================================================================
@@ -632,7 +612,7 @@ void loop() {
 
       // Prevent buffer overflow
       if (serialBuffer.length() >= maxBufferSize) {
-        Serial.println("{\"error\": \"Buffer overflow\"}");
+        Serial.println(F("{\"error\":\"buf\"}"));
         serialBuffer = "";
       }
     }
