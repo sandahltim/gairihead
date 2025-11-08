@@ -283,7 +283,7 @@ class GairiHeadAssistant:
     async def run_interactive_mode(self):
         """
         Run in interactive mode (press Enter to trigger interaction)
-        
+
         This is the simple "do it well" mode - button triggered instead of
         continuous listening with wake words (Core Principle #8)
         """
@@ -293,19 +293,56 @@ class GairiHeadAssistant:
         logger.info("Press ENTER to trigger voice interaction")
         logger.info("Press Ctrl+C to exit")
         logger.info("=" * 60 + "\n")
-        
+
         self.running = True
-        
+
         try:
             while self.running:
                 # Wait for Enter key
                 await asyncio.get_event_loop().run_in_executor(
                     None, input, "\nPress ENTER to start interaction... "
                 )
-                
+
                 # Handle interaction
                 await self.handle_interaction()
-        
+
+        except KeyboardInterrupt:
+            logger.info("\n\nShutting down...")
+            self.running = False
+
+    async def run_production_mode(self):
+        """
+        Run in production mode (touchscreen trigger, no keyboard)
+
+        Listens for Arduino touchscreen center button press to trigger interaction.
+        Perfect for deployed GairiHead (no keyboard available).
+        """
+        logger.info("\n" + "=" * 60)
+        logger.info("GairiHead Voice Assistant - Production Mode")
+        logger.info("=" * 60)
+        logger.info("Touch CENTER button on display to trigger voice interaction")
+        logger.info("Press Ctrl+C to exit")
+        logger.info("=" * 60 + "\n")
+
+        if not self.arduino_display or not self.arduino_display.connected:
+            logger.error("❌ Arduino display not connected - production mode requires touchscreen!")
+            logger.info("   Run with --mode interactive for keyboard-based testing")
+            return
+
+        self.running = True
+
+        try:
+            while self.running:
+                # Check for touch commands from Arduino
+                cmd = self.arduino_display.check_commands()
+
+                if cmd and cmd.get('touch') == 'center':
+                    logger.info("🖱️ Center button pressed - starting interaction")
+                    await self.handle_interaction()
+
+                # Small delay to avoid CPU spinning
+                await asyncio.sleep(0.1)
+
         except KeyboardInterrupt:
             logger.info("\n\nShutting down...")
             self.running = False
@@ -369,9 +406,9 @@ async def main():
     parser = argparse.ArgumentParser(description="GairiHead Voice Assistant")
     parser.add_argument(
         '--mode',
-        choices=['interactive', 'continuous', 'test'],
-        default='interactive',
-        help='Run mode: interactive (button), continuous (auto), or test (component tests)'
+        choices=['interactive', 'production', 'continuous', 'test'],
+        default='production',
+        help='Run mode: production (touchscreen), interactive (keyboard), continuous (auto), or test (component tests)'
     )
     parser.add_argument(
         '--interval',
@@ -410,22 +447,25 @@ async def main():
     try:
         if args.mode == 'test':
             logger.info("Running component tests...")
-            
+
             # Test voice pipeline
             logger.info("\n=== Testing Voice Pipeline ===")
             assistant.voice.test_pipeline()
-            
+
             # Show stats
             logger.info("\n=== Statistics ===")
             stats = assistant.get_stats()
             for key, value in stats.items():
                 logger.info(f"{key}: {value}")
-        
+
         elif args.mode == 'continuous':
             await assistant.run_continuous_mode(interval=args.interval)
-        
-        else:  # interactive
+
+        elif args.mode == 'interactive':
             await assistant.run_interactive_mode()
+
+        else:  # production (default)
+            await assistant.run_production_mode()
     
     finally:
         assistant.shutdown()
