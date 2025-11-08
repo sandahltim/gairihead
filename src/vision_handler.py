@@ -190,8 +190,23 @@ class VisionHandler:
         Returns:
             list: List of face rectangles [(x, y, w, h), ...]
         """
-        if not self.face_detection_enabled or self.face_cascade is None:
+        if not self.face_detection_enabled:
             return []
+
+        # Lazy-load face cascade if not already loaded
+        if self.face_cascade is None:
+            try:
+                cascade_full_path = cv2.data.haarcascades + self.cascade_path
+                self.face_cascade = cv2.CascadeClassifier(cascade_full_path)
+
+                if self.face_cascade.empty():
+                    logger.error("Failed to load face cascade")
+                    return []
+
+                logger.debug("Face detection cascade lazy-loaded")
+            except Exception as e:
+                logger.error(f"Failed to load cascade: {e}")
+                return []
 
         # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -281,25 +296,39 @@ class VisionHandler:
             import face_recognition
             import os
 
-            # Load all images in known faces directory
-            for filename in os.listdir(self.known_faces_dir):
-                if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    # Extract name from filename (e.g., "tim.jpg" → "Tim")
-                    name = filename.rsplit('.', 1)[0].title()
+            # Load all images from subdirectories (e.g., known_faces/tim/*.jpg)
+            for person_dir in self.known_faces_dir.iterdir():
+                if not person_dir.is_dir():
+                    continue
 
-                    image_path = self.known_faces_dir / filename
+                person_name = person_dir.name.title()
+                logger.debug(f"Loading faces for: {person_name}")
 
-                    # Load image and extract face encoding
-                    image = face_recognition.load_image_file(str(image_path))
-                    encodings = face_recognition.face_encodings(image)
+                # Collect all encodings for this person
+                encodings = []
 
-                    if len(encodings) > 0:
-                        self.known_faces[name] = encodings[0]
-                        logger.info(f"Loaded face encoding for: {name}")
-                    else:
-                        logger.warning(f"No face found in {filename}")
+                for image_file in person_dir.glob('*.jpg'):
+                    try:
+                        # Load image and extract face encoding
+                        image = face_recognition.load_image_file(str(image_file))
+                        file_encodings = face_recognition.face_encodings(image)
 
-            logger.info(f"Loaded {len(self.known_faces)} known faces")
+                        if len(file_encodings) > 0:
+                            encodings.append(file_encodings[0])
+                            logger.debug(f"  Loaded: {image_file.name}")
+                        else:
+                            logger.warning(f"  No face in: {image_file.name}")
+                    except Exception as e:
+                        logger.warning(f"  Failed to load {image_file.name}: {e}")
+
+                # Average all encodings for this person (more robust recognition)
+                if len(encodings) > 0:
+                    import numpy as np
+                    avg_encoding = np.mean(encodings, axis=0)
+                    self.known_faces[person_name] = avg_encoding
+                    logger.info(f"Loaded {len(encodings)} face encodings for: {person_name}")
+
+            logger.info(f"Loaded {len(self.known_faces)} known people")
 
         except ImportError:
             logger.warning("face_recognition library not installed - face recognition disabled")
@@ -320,8 +349,14 @@ class VisionHandler:
         Returns:
             str: Name of recognized person or "Unknown"
         """
-        if not self.face_recognition_enabled or len(self.known_faces) == 0:
+        if not self.face_recognition_enabled:
             return "Unknown"
+
+        # Lazy-load known faces if not already loaded
+        if len(self.known_faces) == 0:
+            self.load_known_faces()
+            if len(self.known_faces) == 0:
+                return "Unknown"
 
         try:
             import face_recognition
