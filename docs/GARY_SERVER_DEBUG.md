@@ -1,6 +1,26 @@
 # Gary Server Debugging
 
-## Current Issue (2025-11-08)
+## UPDATE (2025-11-08 16:35)
+
+### LIKELY ROOT CAUSE: Microphone Volume Too Low
+
+**New Evidence**: Recording RMS values are very low:
+- First recording: RMS 0.0540 (should be 0.1-0.3 for speech)
+- Second recording: RMS 0.0006 (basically just noise)
+
+**What's happening**:
+1. GairiHead VAD is working ✅
+2. Microphone is recording ✅
+3. **But microphone volume is too low** ❌
+4. Sending mostly silent/noise audio to Gary
+5. Gary's Whisper transcribing noise as random text (hallucination)
+
+**Test**: Run `scripts/test_microphone.py` to verify microphone
+**Fix**: Increase microphone volume with `alsamixer`
+
+---
+
+## Previous Issue (2025-11-08)
 
 ### Symptoms
 Gary server is returning error responses with unknown tier/model:
