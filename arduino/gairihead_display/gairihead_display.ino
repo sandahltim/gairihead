@@ -12,6 +12,7 @@
  * - JSON protocol over USB serial
  *
  * Uses MCUFRIEND_kbv library for 8-bit parallel interface
+ * Serial RX buffer increased to 512 bytes in HardwareSerial.h
  */
 
 #include <Adafruit_GFX.h>
@@ -128,16 +129,23 @@ String expressionToEmoji(String expr) {
   if (expr == "disapproval") return F(":/");
   if (expr == "calculating") return F("o.O");
   if (expr == "thinking") return F("...");
-  if (expr == "processing") return F("(*_*)");
+  if (expr == "processing") return F("*_*");
   if (expr == "alert") return F("!");
   if (expr == "concern") return F(":(");
+  if (expr == "concerned") return F(":(");
   if (expr == "frustrated") return F(">:(");
   if (expr == "confused") return F("???");
   if (expr == "sheepish") return F("^_^;");
   if (expr == "pride") return F("^_^");
   if (expr == "celebration") return F("\\o/");
-  if (expr == "listening") return F("<ear>");
-  return F("o_o");
+  if (expr == "listening") return F("o.o");
+  if (expr == "idle") return F("-.-");
+  if (expr == "neutral") return F(":|");
+  if (expr == "intrigued") return F("o.o");
+  if (expr == "surprised") return F("O_O");
+  if (expr == "skeptical") return F("-_-");
+  if (expr == "bored") return F("-_-");
+  return F("^_^");
 }
 
 // =============================================================================
@@ -146,7 +154,7 @@ String expressionToEmoji(String expr) {
 
 void wrapText(String text, int x, int y, int maxWidth, int lineHeight, uint16_t color) {
   tft.setTextColor(color);
-  tft.setTextSize(1);
+  tft.setTextSize(2);  // Increased size for better readability
 
   int cursorX = x;
   int cursorY = y;
@@ -246,10 +254,10 @@ void drawConversationView() {
   tft.setCursor(10, 10);
   tft.print("Conversation");
 
-  // Expression emoji
-  tft.setTextSize(3);
+  // Expression emoji (size 2 to prevent wrapping)
+  tft.setTextSize(2);
   tft.setTextColor(COLOR_EXPR);
-  tft.setCursor(SCREEN_WIDTH - 50, 10);
+  tft.setCursor(SCREEN_WIDTH - 60, 10);
   tft.print(expressionToEmoji(expression));
 
   // User text
@@ -258,8 +266,7 @@ void drawConversationView() {
   tft.setCursor(10, 45);
   tft.print("User:");
 
-  tft.setTextSize(1);
-  wrapText(userText, 10, 65, SCREEN_WIDTH - 20, 10, COLOR_TEXT);
+  wrapText(userText, 10, 65, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
 
   // Gairi text
   int gairiY = 135;
@@ -268,8 +275,7 @@ void drawConversationView() {
   tft.setCursor(10, gairiY);
   tft.print("Gairi:");
 
-  tft.setTextSize(1);
-  wrapText(gairiText, 10, gairiY + 20, SCREEN_WIDTH - 20, 10, COLOR_TEXT);
+  wrapText(gairiText, 10, gairiY + 20, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
 
   // Footer info
   tft.setTextSize(1);
@@ -490,12 +496,8 @@ void handleJsonMessage(String json) {
     tier = doc["tier"] | "local";
     responseTime = doc["response_time"] | 0.0;
 
-    Serial.println(F("{\"ok\":1}"));
-
-    // Redraw if on conversation view
-    if (currentView == VIEW_CONVERSATION) {
-      drawConversationView();
-    }
+    // Auto-switch to conversation view and display
+    switchView(VIEW_CONVERSATION);
 
   } else if (strcmp(type, "status") == 0) {
     userName = doc["user"].as<String>();
@@ -607,10 +609,15 @@ void setup() {
 
 void loop() {
   // Handle serial input
+  // Wait for complete message to arrive in buffer
+  if (Serial.available() > 0) {
+    delay(20);  // Allow full message to arrive in buffer
+  }
+
   while (Serial.available() > 0) {
     char c = Serial.read();
 
-    if (c == '\n') {
+    if (c == '\n' || c == '\r') {
       // Complete message received
       if (serialBuffer.length() > 0) {
         handleJsonMessage(serialBuffer);
