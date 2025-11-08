@@ -507,9 +507,13 @@ class LLMTierManager:
             result['tokens'] = len(result.get('response', '').split())
             result['confidence'] = 1.0 if result.get('tier') == 'cloud' else 0.8
 
-            logger.success(f"✅ Gary processed full pipeline ({processing_time}ms, "
-                          f"tier={result.get('tier')}, "
-                          f"transcription=\"{result.get('transcription', '')[:50]}...\")")
+            # Log which model was used (important for debugging Gary server tier selection)
+            model_used = result.get('model', 'unknown')
+            tier_used = result.get('tier', 'unknown')
+
+            logger.success(f"✅ Gary processed full pipeline ({processing_time}ms)")
+            logger.info(f"   Tier: {tier_used} | Model: {model_used}")
+            logger.info(f"   Transcription: \"{result.get('transcription', '')[:50]}...\"")
 
             self.stats['total_queries'] += 1
             if result.get('tier') == 'local':

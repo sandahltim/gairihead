@@ -90,7 +90,7 @@ class ArduinoDisplay:
             self.serial.write(json_str.encode('utf-8'))
             self.serial.write(b'\n')  # Newline delimiter
             self.serial.flush()
-            logger.debug(f"Sent to Arduino: {json_str}")
+            logger.info(f"📤 Sent to Arduino: {json_str[:100]}..." if len(json_str) > 100 else f"📤 Sent to Arduino: {json_str}")
             return True
 
         except serial.SerialException as e:
@@ -126,9 +126,28 @@ class ArduinoDisplay:
             self.serial.timeout = original_timeout
 
             if line:
-                data = json.loads(line)
-                logger.debug(f"Received from Arduino: {data}")
-                return data
+                # Try to parse JSON - if it fails due to extra characters, try to fix it
+                try:
+                    data = json.loads(line)
+                    logger.debug(f"Received from Arduino: {data}")
+                    return data
+                except json.JSONDecodeError:
+                    # Common issue: extra closing braces - try to find valid JSON
+                    # Count braces and truncate at first complete JSON object
+                    brace_count = 0
+                    for i, char in enumerate(line):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                # Found complete JSON object
+                                clean_line = line[:i+1]
+                                data = json.loads(clean_line)
+                                logger.debug(f"Received from Arduino (cleaned): {data}")
+                                return data
+                    # If we get here, couldn't fix it
+                    raise
             return None
 
         except json.JSONDecodeError as e:

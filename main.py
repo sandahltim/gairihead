@@ -35,6 +35,7 @@ from src.camera_manager import CameraManager
 from src.vision_handler import VisionHandler
 from src.arduino_display import ArduinoDisplay
 from src.expression_engine import ExpressionEngine
+from src.servo_controller import ServoController
 
 
 class GairiHeadAssistant:
@@ -130,17 +131,31 @@ class GairiHeadAssistant:
             logger.error(f"❌ Arduino display initialization failed: {e}")
             self.arduino_display = None
 
-        # 4.5. Expression Engine (OPTIONAL - requires servos)
+        # 4.5. Expression Engine + Servo Controller (OPTIONAL)
         try:
             logger.info("4.5. Initializing expression engine...")
             # ExpressionEngine expects directory path, not file path
             config_dir = self.config_path.parent
             self.expression_engine = ExpressionEngine(config_path=str(config_dir))
-            logger.success("✅ Expression engine initialized (servos calibrated, ready for hardware)")
+
+            # Initialize servo controller and attach to expression engine
+            logger.info("     Initializing servo controller...")
+            try:
+                self.servo_controller = ServoController(config_path=str(self.config_path))
+                self.expression_engine.set_controllers(
+                    servo_controller=self.servo_controller,
+                    arduino_display=self.arduino_display
+                )
+                logger.success("✅ Expression engine + servos initialized")
+            except Exception as servo_error:
+                logger.warning(f"⚠️ Servo controller init failed: {servo_error}")
+                logger.info("   Expression engine will work without servo hardware")
+                self.servo_controller = None
         except Exception as e:
             logger.warning(f"⚠️ Expression engine initialization failed: {e}")
             logger.info("   Continuing without servo expressions (software will still work)")
             self.expression_engine = None
+            self.servo_controller = None
 
         # 5. Voice Handler (REQUIRED)
         try:
@@ -392,10 +407,17 @@ class GairiHeadAssistant:
     def shutdown(self):
         """Clean shutdown of all components"""
         logger.info("Shutting down GairiHead...")
-        
+
         if self.camera:
             self.camera.release()
-        
+
+        if hasattr(self, 'servo_controller') and self.servo_controller:
+            try:
+                self.servo_controller.cleanup()
+                logger.debug("Servo controller cleaned up")
+            except:
+                pass
+
         logger.info("✅ Shutdown complete")
 
 

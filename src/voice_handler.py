@@ -471,8 +471,9 @@ class VoiceHandler:
             transcription = result.get('transcription', '')
             response_text = result['response']
             tier = result.get('tier', 'unknown')
+            model = result.get('model', 'unknown')
 
-            logger.success(f"✅ Got response from {tier} tier")
+            logger.success(f"✅ Got response from {tier} tier (model: {model})")
             logger.info(f"   Transcribed: \"{transcription}\"")
 
         except Exception as e:
