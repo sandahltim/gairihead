@@ -52,6 +52,16 @@ data/faces/
 *.bin
 *.pcb
 
+# Arduino build artifacts
+bin/
+arduino/*/bin/
+*.hex
+*.elf
+*.eep
+*.lss
+*.map
+arduino/*test*/
+
 # Test artifacts
 .pytest_cache/
 .coverage
@@ -76,3 +86,9 @@ test_images/
 *.jpeg
 !docs/**/*.png
 !docs/**/*.jpg
+
+# Temporary test scripts (debug/one-off)
+scripts/test_*_simple.py
+scripts/test_*_debug.py
+scripts/send_and_monitor.py
+test_*_simple.py

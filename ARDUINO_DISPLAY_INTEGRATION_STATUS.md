@@ -118,6 +118,110 @@ void loop() {
 
 ---
 
+### Fix 3: Serial Buffer Overflow (Commit 59c174f)
+
+**Problem**: JSON messages truncated at 63 bytes despite serial timing fix
+
+**Symptoms**:
+- Messages showing `BEFORE_DELAY: 63` and `AFTER_DELAY: 63`
+- Full 132-byte JSON message sent from Pi
+- Only first 63 bytes received by Arduino
+- Parse error: `IncompleteInput`
+- Display not updating with conversation text
+
+**Root Cause**: Arduino Mega's hardware serial receive buffer too small
+- Default buffer size: 64 bytes (hardcoded in HardwareSerial.h)
+- Test message: 132 bytes JSON
+- Buffer filled to capacity (63 bytes + 1 newline = 64 total)
+- Remaining 69 bytes lost due to buffer overflow
+- No way to increase buffer via sketch code alone
+
+**Investigation Process**:
+1. Added debug to show buffer size before/after 20ms delay
+2. Discovered buffer stuck at 63 bytes regardless of delay
+3. Tried defining `SERIAL_RX_BUFFER_SIZE` in sketch - didn't work
+4. Tried compiler flag `-DSERIAL_RX_BUFFER_SIZE=512` - didn't work
+5. Located root cause: HardwareSerial.h line 53 defines buffer as 64 bytes
+6. **Solution**: Directly edited Arduino core library file
+
+**Solution**:
+```cpp
+// File: ~/.arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino/HardwareSerial.h
+// Line 53 - Changed from:
+#define SERIAL_RX_BUFFER_SIZE 64
+
+// To:
+#define SERIAL_RX_BUFFER_SIZE 512
+```
+
+**Additional Improvements**:
+```cpp
+// gairihead_display.ino
+
+// 1. Added 20ms delay to allow full message arrival
+if (Serial.available() > 0) {
+  delay(20);  // Allow full message to arrive in buffer
+}
+
+// 2. Fixed line ending detection for both \n and \r
+if (c == '\n' || c == '\r') {
+  // Process complete message
+}
+
+// 3. Increased text size for better readability
+void wrapText(...) {
+  tft.setTextSize(2);  // Was 1, now 2
+}
+
+// 4. Increased line height
+wrapText(userText, 10, 65, SCREEN_WIDTH - 20, 18, COLOR_TEXT);  // Was 10, now 18
+
+// 5. Fixed emoji size and position to prevent wrapping
+tft.setTextSize(2);  // Was 3
+tft.setCursor(SCREEN_WIDTH - 60, 10);  // Was -50, now -60
+
+// 6. Added missing emoji mappings
+if (expr == "idle") return F("-.-");
+if (expr == "neutral") return F(":|");
+if (expr == "concerned") return F(":(");
+// ... 7 more expressions added
+```
+
+**Impact on Memory**:
+- Global variables increased from 1262 to 1712 bytes (450-byte increase)
+- Still well within Arduino Mega's 8192 bytes RAM (20% usage)
+- 512-byte buffer can handle ~3-4 typical messages buffered
+
+**Verification**:
+```
+Before fix:
+  BEFORE_DELAY: 63
+  MSG_COMPLETE: 63 (truncated)
+  Parse error: IncompleteInput
+
+After fix:
+  BEFORE_DELAY: 133 (132 bytes + newline)
+  MSG_COMPLETE: 132 (complete!)
+  DEBUG_TYPE: "conversation"
+  Display updates correctly ✅
+```
+
+**Testing**:
+- Short messages (132 bytes): ✅ Complete reception
+- Long messages (262 bytes): ✅ Complete reception
+- Text size 2 with line height 18: ✅ Readable and wraps correctly
+- All emoji mappings: ✅ Display properly
+- Auto-switch to conversation view: ✅ Working
+
+**Result**: ✅ **FULLY FUNCTIONAL** - Serial buffer overflow eliminated, text readable, all features operational
+
+**Note for Future Sessions**:
+- The HardwareSerial.h modification is system-wide for this Pi
+- If Arduino IDE is updated, may need to reapply the 512-byte buffer change
+- Documented in sketch header comment for reference
+
+---
+
 ## ✅ COMPLETED
 
 ### 1. Arduino Display Module (`src/arduino_display.py`)
