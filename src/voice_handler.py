@@ -24,7 +24,6 @@ Core Principles Applied:
 import whisper
 import sounddevice as sd
 import numpy as np
-import pyttsx3
 import wave
 import io
 import time
@@ -32,6 +31,14 @@ import tempfile
 from pathlib import Path
 from loguru import logger
 from typing import Optional, Dict, Tuple
+
+# Try to import Piper, fall back to pyttsx3 if not available
+try:
+    from piper import PiperVoice
+    PIPER_AVAILABLE = True
+except ImportError:
+    PIPER_AVAILABLE = False
+    import pyttsx3
 
 
 class VoiceHandler:
@@ -62,13 +69,18 @@ class VoiceHandler:
         self.whisper_model_name = self.config.get('stt', {}).get('model', 'tiny')
         self.use_remote_transcription = self.config.get('stt', {}).get('use_remote', True)
 
-        transcription_method = "Gary server (remote)" if self.use_remote_transcription else f"Local (Whisper {self.whisper_model_name})"
-        logger.info(f"VoiceHandler v1.0 initialized (STT: {transcription_method}, TTS: pyttsx3)")
-
         # TTS settings
+        self.tts_engine_type = self.config.get('tts', {}).get('engine', 'piper')
         self.tts_engine = None
+        self.piper_voice = None
+        self.tts_voice = self.config.get('tts', {}).get('voice', 'joe')
         self.tts_speed = self.config.get('tts', {}).get('speed', 1.0)
         self.tts_volume = self.config.get('tts', {}).get('volume', 0.8)
+        self.tts_model_path = self.config.get('tts', {}).get('model_path', '/home/tim/GairiHead/data/piper_voices')
+
+        transcription_method = "Gary server (remote)" if self.use_remote_transcription else f"Local (Whisper {self.whisper_model_name})"
+        tts_method = "Piper (neural)" if self.tts_engine_type == 'piper' and PIPER_AVAILABLE else "pyttsx3 (espeak)"
+        logger.info(f"VoiceHandler v1.0 initialized (STT: {transcription_method}, TTS: {tts_method})")
 
         # Statistics
         self.stats = {
@@ -91,13 +103,30 @@ class VoiceHandler:
         return self.whisper_model
 
     def _init_tts_engine(self):
-        """Lazy initialize TTS engine"""
-        if self.tts_engine is None:
-            logger.info("Initializing pyttsx3 TTS engine...")
-            self.tts_engine = pyttsx3.init()
-            self.tts_engine.setProperty('rate', int(150 * self.tts_speed))  # Words per minute
-            self.tts_engine.setProperty('volume', self.tts_volume)
-            logger.success("✅ TTS engine initialized")
+        """Lazy initialize TTS engine (Piper or pyttsx3)"""
+        if self.tts_engine is not None:
+            return self.tts_engine
+
+        if self.tts_engine_type == 'piper' and PIPER_AVAILABLE:
+            logger.info(f"Initializing Piper TTS engine (voice: {self.tts_voice})...")
+            try:
+                # Load Piper voice model
+                model_file = f"{self.tts_model_path}/en_US-{self.tts_voice}-medium.onnx"
+                self.piper_voice = PiperVoice.load(model_file)
+                self.tts_engine = 'piper'  # Just a marker
+                logger.success(f"✅ Piper TTS initialized (voice: {self.tts_voice}, neural)")
+                return self.tts_engine
+            except Exception as e:
+                logger.error(f"❌ Piper initialization failed: {e}, falling back to pyttsx3")
+                # Fall through to pyttsx3
+
+        # Fallback to pyttsx3
+        logger.info("Initializing pyttsx3 TTS engine...")
+        import pyttsx3
+        self.tts_engine = pyttsx3.init()
+        self.tts_engine.setProperty('rate', int(150 * self.tts_speed))
+        self.tts_engine.setProperty('volume', self.tts_volume)
+        logger.success(f"✅ pyttsx3 TTS initialized (rate: {int(150 * self.tts_speed)} WPM)")
         return self.tts_engine
 
     def record_audio(self, duration: float = 3.0, silence_threshold: float = 0.01) -> Optional[np.ndarray]:
@@ -198,7 +227,7 @@ class VoiceHandler:
 
     def speak(self, text: str) -> bool:
         """
-        Speak text using TTS
+        Speak text using TTS (Piper or pyttsx3)
 
         Args:
             text: Text to speak
@@ -207,13 +236,27 @@ class VoiceHandler:
             True if successful, False otherwise
         """
         try:
-            engine = self._init_tts_engine()
+            self._init_tts_engine()
 
             logger.info(f"🔊 Speaking: \"{text[:50]}{'...' if len(text) > 50 else ''}\"")
             start_time = time.time()
 
-            engine.say(text)
-            engine.runAndWait()
+            if self.tts_engine == 'piper' and self.piper_voice:
+                # Use Piper TTS
+                audio_bytes = bytearray()
+                for chunk in self.piper_voice.synthesize(text):
+                    audio_bytes.extend(chunk.audio_int16_bytes)
+
+                # Play audio directly with sounddevice
+                audio_array = np.frombuffer(bytes(audio_bytes), dtype=np.int16)
+                audio_float = audio_array.astype(np.float32) / 32767.0
+
+                sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
+                sd.wait()
+            else:
+                # Use pyttsx3
+                self.tts_engine.say(text)
+                self.tts_engine.runAndWait()
 
             speak_time = int((time.time() - start_time) * 1000)
             self.stats['tts_successes'] += 1

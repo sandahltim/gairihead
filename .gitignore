@@ -92,3 +92,6 @@ scripts/test_*_simple.py
 scripts/test_*_debug.py
 scripts/send_and_monitor.py
 test_*_simple.py
+# Piper voice models (too large for git, download with script)
+data/piper_voices/*.onnx
+data/piper_voices/*.json

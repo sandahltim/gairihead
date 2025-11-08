@@ -74,10 +74,15 @@ voice:
     use_remote: true   # Use Gary server for transcription (MUCH faster!)
 
   tts:
-    engine: "piper"    # or "elevenlabs", "gtts"
-    voice: "en_US-lessac-medium"
-    speed: 1.0
+    engine: "piper"    # Neural TTS (natural, not robotic!)
+    voice: "joe"       # Smooth, warm male voice (SELECTED!)
+    speed: 1.0         # Normal speed (Piper handles pacing naturally)
     volume: 0.8
+    # Piper voice options (all male, natural-sounding):
+    # joe    - Smooth, warm (SELECTED - best for TARS character)
+    # lessac - Professional, clear
+    # ryan   - Casual, conversational
+    model_path: "/home/tim/GairiHead/data/piper_voices"
 
   microphone:
     device_index: 0    # Default USB mic
