@@ -259,41 +259,86 @@ class GairiHeadAssistant:
             }
     
     async def handle_interaction(self):
-        """Handle a single voice interaction"""
+        """Handle a single voice interaction with proper UX flow"""
         self.interaction_count += 1
-        
+
         logger.info(f"\n{'=' * 60}")
         logger.info(f"Interaction #{self.interaction_count}")
         logger.info(f"{'=' * 60}")
-        
-        # Step 1: Get authorization through face recognition
-        logger.info("Step 1: Checking authorization...")
+
+        # Step 1: Visual scan for authorization (HAPPENS ON BUTTON PRESS)
+        logger.info("👁️  Step 1: Scanning for face authorization...")
+
+        # Update Arduino display: Scanning state
+        if self.arduino_display and self.arduino_display.connected:
+            self.arduino_display.update_status(
+                state="scanning",
+                expression="alert",
+                user="unknown",
+                level=3,
+                confidence=0.0
+            )
+
+        # Update expression: alert (looking at user)
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('alert')
+            except:
+                pass
+
+        # Perform face recognition
         authorization = self.get_authorization()
 
         auth_level_name = {1: 'Main User', 2: 'Guest', 3: 'Stranger'}
         logger.info(f"🔐 Authorization: Level {authorization['level']} ({auth_level_name[authorization['level']]})")
         logger.info(f"   User: {authorization['user']}, Confidence: {authorization['confidence']:.2f}")
-        
-        # Step 2: Listen to voice query
-        logger.info("Step 2: Listening for voice query (3 seconds)...")
-        print("\n" + "="*60)
-        print("🎤 RECORDING NOW - SPEAK YOUR QUESTION!")
-        print("="*60 + "\n")
+
+        # Update Arduino with authorization result
+        if self.arduino_display and self.arduino_display.connected:
+            self.arduino_display.update_status(
+                state="authorized",
+                expression="idle",
+                user=authorization['user'],
+                level=authorization['level'],
+                confidence=authorization['confidence']
+            )
+
+        # Brief pause to show authorization result
+        await asyncio.sleep(0.5)
+
+        # Step 2: Voice interaction
+        logger.info("🎤 Step 2: Ready for voice query...")
+        logger.info("   (Speak when ready - stops automatically when done)")
 
         try:
-            # Process voice query (record → transcribe → query Gary → speak)
+            # Process voice query with VAD (auto-stops when done speaking)
+            # Voice handler will update Arduino display during listening/thinking/speaking
             response = self.voice.process_voice_query(
-                duration=3.0,
+                use_vad=True,  # Use Voice Activity Detection (auto-stop)
                 authorization=authorization
             )
-            
+
             if response:
-                logger.success(f"✅ Interaction complete")
+                logger.success(f"✅ Interaction #{self.interaction_count} complete")
             else:
-                logger.warning("⚠️ Interaction failed")
-        
+                logger.warning("⚠️ Interaction failed - no response")
+
         except Exception as e:
             logger.error(f"❌ Interaction error: {e}")
+
+            # Show error state on display
+            if self.arduino_display and self.arduino_display.connected:
+                self.arduino_display.update_status(
+                    state="error",
+                    expression="confused"
+                )
+
+        # Return to idle
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('idle')
+            except:
+                pass
     
     async def run_interactive_mode(self):
         """
@@ -343,6 +388,23 @@ class GairiHeadAssistant:
             logger.error("❌ Arduino display not connected - production mode requires touchscreen!")
             logger.info("   Run with --mode interactive for keyboard-based testing")
             return
+
+        # Set initial idle state on display
+        if self.arduino_display and self.arduino_display.connected:
+            self.arduino_display.update_status(
+                state="idle",
+                expression="idle",
+                user="ready",
+                level=3,
+                confidence=0.0
+            )
+
+        # Set initial idle expression
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('idle')
+            except:
+                pass
 
         self.running = True
 
