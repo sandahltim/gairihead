@@ -110,7 +110,7 @@ class GairiHeadAssistant:
         # 4. Arduino Display (OPTIONAL)
         try:
             logger.info("4. Initializing Arduino display...")
-            display_config = self.config.get('arduino_display', {})
+            display_config = self.config.get('hardware', {}).get('arduino_display', {})
             enabled = display_config.get('enabled', False)
 
             if enabled:
