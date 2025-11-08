@@ -34,6 +34,7 @@ from src.llm_tier_manager import LLMTierManager
 from src.camera_manager import CameraManager
 from src.vision_handler import VisionHandler
 from src.arduino_display import ArduinoDisplay
+from src.expression_engine import ExpressionEngine
 
 
 class GairiHeadAssistant:
@@ -42,23 +43,27 @@ class GairiHeadAssistant:
     def __init__(self, config_path: Path):
         """
         Initialize GairiHead assistant
-        
+
         Args:
             config_path: Path to gairi_head.yaml config file
         """
+        # Store config path
+        self.config_path = config_path
+
         # Load config
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
+
         logger.info("=== GairiHead Voice Assistant v1.0 ===")
-        
+
         # Initialize components
         self.camera = None
         self.vision = None
         self.llm_manager = None
         self.arduino_display = None
+        self.expression_engine = None
         self.voice = None
-        
+
         # State
         self.running = False
         self.interaction_count = 0
@@ -76,12 +81,9 @@ class GairiHeadAssistant:
         try:
             logger.info("1. Initializing camera...")
             # CameraManager expects config_path, not config dict
-            # Pass None to use default config path
+            # Camera auto-initializes in __init__
             self.camera = CameraManager(config_path=None)
-            if self.camera.initialize():
-                logger.success("✅ Camera initialized")
-            else:
-                logger.warning("⚠️ Camera failed to initialize (continuing without face recognition)")
+            logger.success("✅ Camera initialized")
         except Exception as e:
             logger.error(f"❌ Camera initialization failed: {e}")
             self.camera = None
@@ -128,13 +130,26 @@ class GairiHeadAssistant:
             logger.error(f"❌ Arduino display initialization failed: {e}")
             self.arduino_display = None
 
+        # 4.5. Expression Engine (OPTIONAL - requires servos)
+        try:
+            logger.info("4.5. Initializing expression engine...")
+            # ExpressionEngine expects directory path, not file path
+            config_dir = self.config_path.parent
+            self.expression_engine = ExpressionEngine(config_path=str(config_dir))
+            logger.success("✅ Expression engine initialized (servos calibrated, ready for hardware)")
+        except Exception as e:
+            logger.warning(f"⚠️ Expression engine initialization failed: {e}")
+            logger.info("   Continuing without servo expressions (software will still work)")
+            self.expression_engine = None
+
         # 5. Voice Handler (REQUIRED)
         try:
             logger.info("5. Initializing voice handler...")
             self.voice = VoiceHandler(
                 self.config,
                 llm_tier_manager=self.llm_manager,
-                arduino_display=self.arduino_display
+                arduino_display=self.arduino_display,
+                expression_engine=self.expression_engine
             )
             logger.success("✅ Voice handler initialized")
         except Exception as e:
@@ -166,18 +181,32 @@ class GairiHeadAssistant:
         
         try:
             # Capture frame
-            frame = self.camera.capture_frame()
-            if frame is None:
+            success, frame = self.camera.read_frame()
+            if not success or frame is None:
                 logger.warning("Failed to capture frame - defaulting to stranger mode")
                 return {
                     'level': 3,
                     'user': 'unknown',
                     'confidence': 0.0
                 }
-            
+
+            # Detect faces first
+            faces = self.vision.detect_faces(frame)
+
+            if not faces:
+                logger.info("👤 No face detected - stranger mode")
+                return {
+                    'level': 3,
+                    'user': 'unknown',
+                    'confidence': 0.0
+                }
+
+            # Use the first (largest) detected face
+            face_rect = faces[0]
+
             # Recognize face
-            result = self.vision.recognize_face(frame)
-            
+            result = self.vision.recognize_face(frame, face_rect)
+
             if result['recognized']:
                 logger.info(f"🎯 Recognized: {result['name']} (confidence: {result['confidence']:.2f})")
                 
@@ -225,14 +254,17 @@ class GairiHeadAssistant:
         # Step 1: Get authorization through face recognition
         logger.info("Step 1: Checking authorization...")
         authorization = self.get_authorization()
-        
+
         auth_level_name = {1: 'Main User', 2: 'Guest', 3: 'Stranger'}
-        logger.info(f"Authorization: Level {authorization['level']} ({auth_level_name[authorization['level']]})")
+        logger.info(f"🔐 Authorization: Level {authorization['level']} ({auth_level_name[authorization['level']]})")
+        logger.info(f"   User: {authorization['user']}, Confidence: {authorization['confidence']:.2f}")
         
         # Step 2: Listen to voice query
         logger.info("Step 2: Listening for voice query (3 seconds)...")
-        logger.info("🎤 Speak now...")
-        
+        print("\n" + "="*60)
+        print("🎤 RECORDING NOW - SPEAK YOUR QUESTION!")
+        print("="*60 + "\n")
+
         try:
             # Process voice query (record → transcribe → query Gary → speak)
             response = self.voice.process_voice_query(

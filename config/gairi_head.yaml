@@ -37,13 +37,15 @@ hardware:
       pixels: 12
 
   arduino_display:
-    enabled: true
+    enabled: true  # Set to true to enable Arduino display
     port: "/dev/ttyACM0"  # Arduino USB connection
     baudrate: 115200
     timeout: 1.0
 
 # Intelligence Configuration
 intelligence:
+  gary_websocket_url: "ws://100.106.44.11:8765/ws"  # Gary server WebSocket (Tailscale)
+
   local_llm:
     enabled: true
     model: "llama3.2:3b"
@@ -55,7 +57,6 @@ intelligence:
   haiku:
     enabled: true
     escalation_threshold: 0.7  # Confidence threshold
-    websocket_url: "ws://localhost:8765/ws"
     retry_attempts: 3
 
 # Voice Configuration
@@ -68,8 +69,9 @@ voice:
 
   stt:
     engine: "whisper"  # or "google", "vosk"
-    model: "base"      # tiny, base, small, medium
+    model: "tiny"      # tiny, base, small, medium (only used as fallback)
     language: "en"
+    use_remote: true   # Use Gary server for transcription (MUCH faster!)
 
   tts:
     engine: "piper"    # or "elevenlabs", "gtts"

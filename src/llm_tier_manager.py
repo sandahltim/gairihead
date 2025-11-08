@@ -316,6 +316,213 @@ class LLMTierManager:
             self.stats['cloud_failures'] += 1
             return None
 
+    def transcribe_audio(self, audio_data, sample_rate=16000, authorization=None):
+        """
+        Send audio to Gary server for transcription (MUCH faster than local)
+
+        Uses faster-whisper on Gary server for near-instant transcription
+
+        Args:
+            audio_data: numpy array of audio samples (float32)
+            sample_rate: Audio sample rate (default 16000)
+            authorization: Authorization context from face recognition
+
+        Returns:
+            str: Transcribed text or None on failure
+        """
+        try:
+            import base64
+            import io
+            import wave
+            import numpy as np
+
+            logger.info("📤 Sending audio to Gary for transcription...")
+            start_time = time.time()
+
+            # Convert numpy audio to WAV bytes
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(sample_rate)
+
+                # Convert float32 to int16
+                audio_int16 = (audio_data * 32767).astype(np.int16)
+                wf.writeframes(audio_int16.tobytes())
+
+            # Encode to base64
+            audio_base64 = base64.b64encode(wav_buffer.getvalue()).decode('utf-8')
+
+            # Build JSON message for Gary (v3.1 format)
+            message = {
+                'audio': audio_base64,
+                'source': 'gairihead',
+                'authorization': authorization or {
+                    'level': 3,  # Default: stranger
+                    'user': 'unknown',
+                    'confidence': 0.0
+                }
+            }
+
+            logger.debug(f"Sending to Gary: source={message['source']}, "
+                        f"auth_level={message['authorization']['level']}, "
+                        f"audio_size={len(audio_base64)} bytes")
+
+            # Connect to Gary websocket
+            ws = websocket.create_connection(
+                self.gary_ws_url,
+                timeout=30.0  # Transcription can take longer
+            )
+
+            logger.debug(f"Connected to Gary for transcription")
+
+            # Send JSON request
+            ws.send(json.dumps(message))
+
+            # Receive response
+            response = ws.recv()
+            ws.close()
+
+            transcribe_time = int((time.time() - start_time) * 1000)
+
+            # Parse response - Gary may return JSON or plain text
+            response_str = response.strip()
+
+            # Try to parse as JSON first (Gary v3.1+ returns JSON)
+            try:
+                response_data = json.loads(response_str)
+                # Extract transcription field from JSON response
+                text = response_data.get('transcription', response_str)
+                logger.success(f"✅ Gary transcribed ({transcribe_time}ms): \"{text}\"")
+                return text
+            except json.JSONDecodeError:
+                # Fallback: treat as plain text (older Gary versions)
+                if response_str:
+                    logger.success(f"✅ Gary transcribed ({transcribe_time}ms): \"{response_str}\"")
+                    return response_str
+                else:
+                    logger.warning("⚠️ Empty transcription from Gary")
+                    return None
+
+        except Exception as e:
+            logger.error(f"❌ Transcription request failed: {e}")
+            return None
+
+    def process_audio_query(self, audio_data, sample_rate=16000, authorization=None):
+        """
+        Process audio in single call: transcribe + LLM query (OPTIMIZED)
+
+        This is the OPTIMIZED path - sends audio once, gets full response.
+        Replaces the pattern of: transcribe_audio() → query()
+
+        Args:
+            audio_data: numpy array of audio samples (float32)
+            sample_rate: Audio sample rate (default 16000)
+            authorization: Authorization context from face recognition
+
+        Returns:
+            dict: {
+                'transcription': str,
+                'response': str,
+                'tier': 'local' or 'cloud',
+                'confidence': float,
+                'tokens': int,
+                'time_ms': int
+            }
+        """
+        try:
+            import base64
+            import io
+            import wave
+            import numpy as np
+
+            logger.info("📤 Sending audio to Gary for full pipeline processing...")
+            start_time = time.time()
+
+            # Convert numpy audio to WAV bytes
+            wav_buffer = io.BytesIO()
+            with wave.open(wav_buffer, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(sample_rate)
+
+                # Convert float32 to int16
+                audio_int16 = (audio_data * 32767).astype(np.int16)
+                wf.writeframes(audio_int16.tobytes())
+
+            # Encode to base64
+            audio_base64 = base64.b64encode(wav_buffer.getvalue()).decode('utf-8')
+
+            # Build JSON message for Gary (OPTIMIZED FORMAT)
+            message = {
+                'audio': audio_base64,
+                'source': 'gairihead',
+                'process_full_pipeline': True,  # NEW: Request full processing
+                'tier_preference': 'auto',  # Let Gary decide based on content
+                'authorization': authorization or {
+                    'level': 3,  # Default: stranger
+                    'user': 'unknown',
+                    'confidence': 0.0
+                }
+            }
+
+            logger.info(f"📋 Authorization: level={message['authorization']['level']}, "
+                       f"user={message['authorization']['user']}, "
+                       f"confidence={message['authorization']['confidence']}")
+            logger.debug(f"Sending full pipeline request to Gary: "
+                        f"auth_level={message['authorization']['level']}, "
+                        f"audio_size={len(audio_base64)} bytes")
+
+            # Connect to Gary websocket
+            ws = websocket.create_connection(
+                self.gary_ws_url,
+                timeout=30.0  # Full processing can take longer
+            )
+
+            logger.debug("Connected to Gary for full pipeline")
+
+            # Send JSON request
+            ws.send(json.dumps(message))
+
+            # Receive response (Gary sends JSON for full pipeline)
+            response_data = ws.recv()
+            ws.close()
+
+            processing_time = int((time.time() - start_time) * 1000)
+
+            # Parse JSON response
+            try:
+                result = json.loads(response_data)
+            except json.JSONDecodeError:
+                # Fallback: Old format (just text response)
+                logger.warning("Gary returned plain text - may need Gary server update")
+                result = {
+                    'transcription': '',
+                    'response': response_data,
+                    'tier': 'unknown'
+                }
+
+            # Add metadata
+            result['time_ms'] = processing_time
+            result['tokens'] = len(result.get('response', '').split())
+            result['confidence'] = 1.0 if result.get('tier') == 'cloud' else 0.8
+
+            logger.success(f"✅ Gary processed full pipeline ({processing_time}ms, "
+                          f"tier={result.get('tier')}, "
+                          f"transcription=\"{result.get('transcription', '')[:50]}...\")")
+
+            self.stats['total_queries'] += 1
+            if result.get('tier') == 'local':
+                self.stats['local_queries'] += 1
+            elif result.get('tier') == 'cloud':
+                self.stats['cloud_queries'] += 1
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Full pipeline processing failed: {e}")
+            return None
+
     def get_stats(self):
         """
         Get usage statistics

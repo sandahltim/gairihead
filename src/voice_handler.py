@@ -37,7 +37,7 @@ from typing import Optional, Dict, Tuple
 class VoiceHandler:
     """Manages complete voice interaction pipeline"""
 
-    def __init__(self, config, llm_tier_manager=None, arduino_display=None):
+    def __init__(self, config, llm_tier_manager=None, arduino_display=None, expression_engine=None):
         """
         Initialize voice handler
 
@@ -45,10 +45,12 @@ class VoiceHandler:
             config: Configuration dict from gairi_head.yaml
             llm_tier_manager: LLMTierManager instance for query processing
             arduino_display: ArduinoDisplay instance for visual feedback
+            expression_engine: ExpressionEngine instance for servo expressions
         """
         self.config = config.get('voice', {})
         self.llm_manager = llm_tier_manager
         self.arduino_display = arduino_display
+        self.expression_engine = expression_engine
 
         # Microphone settings
         self.sample_rate = self.config.get('microphone', {}).get('sample_rate', 16000)
@@ -58,7 +60,10 @@ class VoiceHandler:
         # Whisper STT
         self.whisper_model = None
         self.whisper_model_name = self.config.get('stt', {}).get('model', 'tiny')
-        logger.info(f"VoiceHandler v1.0 initialized (Whisper: {self.whisper_model_name}, TTS: pyttsx3)")
+        self.use_remote_transcription = self.config.get('stt', {}).get('use_remote', True)
+
+        transcription_method = "Gary server (remote)" if self.use_remote_transcription else f"Local (Whisper {self.whisper_model_name})"
+        logger.info(f"VoiceHandler v1.0 initialized (STT: {transcription_method}, TTS: pyttsx3)")
 
         # TTS settings
         self.tts_engine = None
@@ -137,20 +142,38 @@ class VoiceHandler:
             logger.error(f"❌ Audio recording failed: {e}")
             return None
 
-    def transcribe_audio(self, audio: np.ndarray) -> Optional[str]:
+    def transcribe_audio(self, audio: np.ndarray, authorization: Optional[Dict] = None) -> Optional[str]:
         """
-        Transcribe audio using Whisper
+        Transcribe audio using remote (Gary) or local (Whisper)
 
         Args:
             audio: numpy array of audio samples (float32, 16kHz)
+            authorization: Authorization context from face recognition (for Gary)
 
         Returns:
             Transcribed text or None if failed
         """
         try:
+            # Use remote transcription via Gary (MUCH faster if available)
+            if self.use_remote_transcription and self.llm_manager:
+                logger.info("📝 Transcribing audio via Gary server...")
+                start_time = time.time()
+
+                text = self.llm_manager.transcribe_audio(audio, self.sample_rate, authorization)
+                transcribe_time = int((time.time() - start_time) * 1000)
+
+                if text:
+                    self.stats['transcription_successes'] += 1
+                    logger.success(f"✅ Remote transcribed ({transcribe_time}ms): \"{text}\"")
+                    return text
+                else:
+                    logger.warning("⚠️ Remote transcription failed, falling back to local")
+                    # Fall through to local transcription
+
+            # Local transcription (fallback or if remote disabled)
             model = self._load_whisper_model()
 
-            logger.info("📝 Transcribing audio with Whisper...")
+            logger.info("📝 Transcribing audio with local Whisper...")
             start_time = time.time()
 
             # Whisper expects float32 audio
@@ -161,7 +184,7 @@ class VoiceHandler:
 
             if text:
                 self.stats['transcription_successes'] += 1
-                logger.success(f"✅ Transcribed ({transcribe_time}ms): \"{text}\"")
+                logger.success(f"✅ Local transcribed ({transcribe_time}ms): \"{text}\"")
                 return text
             else:
                 logger.warning("⚠️ Empty transcription")
@@ -204,7 +227,9 @@ class VoiceHandler:
 
     def process_voice_query(self, duration: float = 3.0, authorization: Optional[Dict] = None, expression: str = 'listening') -> Optional[str]:
         """
-        Complete voice interaction: record → transcribe → query → speak
+        Complete voice interaction: record → process (transcribe + query) → speak
+
+        OPTIMIZED: Single call to Gary for transcription + LLM processing
 
         Args:
             duration: Recording duration in seconds
@@ -216,44 +241,72 @@ class VoiceHandler:
         """
         start_time = time.time()
 
+        # Update expression: listening state
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('listening')
+            except Exception as e:
+                logger.debug(f"Expression engine not available: {e}")
+
         # Update display: listening state
         if self.arduino_display and self.arduino_display.connected:
             self.arduino_display.update_status(
                 state="listening",
-                expression=expression
+                expression="listening"
             )
 
         # Step 1: Record audio
         audio = self.record_audio(duration)
         if audio is None:
             logger.error("Voice query failed: No audio recorded")
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('confused')
+                except:
+                    pass
             return None
 
-        # Step 2: Transcribe
-        text = self.transcribe_audio(audio)
-        if text is None:
-            logger.error("Voice query failed: Transcription failed")
-            return None
-
-        # Step 3: Query LLM
-        tier = "local"
+        # Step 2: Process audio (transcribe + query in ONE call) - OPTIMIZED
         if self.llm_manager is None:
-            logger.warning("No LLM manager configured, returning transcription only")
-            response_text = f"I heard: {text}"
-        else:
-            logger.info(f"🤖 Querying Gary with: \"{text}\"")
+            logger.warning("No LLM manager configured, cannot process audio")
+            return None
+
+        # Update expression: thinking
+        if self.expression_engine:
             try:
-                result = self.llm_manager.query(text, authorization=authorization)
-                if result and result.get('response'):
-                    response_text = result['response']
-                    tier = result.get('tier', 'local')
-                    logger.success(f"✅ Got response from {tier} tier")
-                else:
-                    logger.error("❌ LLM query returned no response")
-                    response_text = "Sorry, I didn't get a response."
-            except Exception as e:
-                logger.error(f"❌ LLM query failed: {e}")
-                response_text = "Sorry, something went wrong."
+                self.expression_engine.set_expression('thinking')
+            except:
+                pass
+
+        logger.info("🤖 Processing audio query via Gary (full pipeline)...")
+        try:
+            # NEW: Single call for transcription + LLM processing
+            result = self.llm_manager.process_audio_query(audio, self.sample_rate, authorization)
+
+            if not result or not result.get('response'):
+                logger.error("❌ Audio processing returned no response")
+                if self.expression_engine:
+                    try:
+                        self.expression_engine.set_expression('confused')
+                    except:
+                        pass
+                return None
+
+            transcription = result.get('transcription', '')
+            response_text = result['response']
+            tier = result.get('tier', 'unknown')
+
+            logger.success(f"✅ Got response from {tier} tier")
+            logger.info(f"   Transcribed: \"{transcription}\"")
+
+        except Exception as e:
+            logger.error(f"❌ Audio processing failed: {e}")
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('error')
+                except:
+                    pass
+            return None
 
         # Calculate response time
         response_time = time.time() - start_time
@@ -261,15 +314,27 @@ class VoiceHandler:
         # Update display: show conversation
         if self.arduino_display and self.arduino_display.connected:
             self.arduino_display.show_conversation(
-                user_text=text,
+                user_text=transcription,
                 gairi_text=response_text,
                 expression=expression,
                 tier=tier,
                 response_time=response_time
             )
 
-        # Step 4: Speak response
+        # Step 3: Speak response (with expression engine sync)
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('speaking')
+            except:
+                pass
+
         self.speak(response_text)
+
+        if self.expression_engine:
+            try:
+                self.expression_engine.set_expression('idle')
+            except:
+                pass
 
         # Update stats
         total_time = int((time.time() - start_time) * 1000)
