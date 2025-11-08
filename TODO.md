@@ -1,6 +1,6 @@
 # GairiHead TODO & Roadmap
-**Last Updated**: 2025-11-07
-**Current Phase**: Software Complete → Hardware Integration
+**Last Updated**: 2025-11-08
+**Current Phase**: Hardware Integration (Servos Calibrated)
 
 ---
 
@@ -23,8 +23,8 @@
 ---
 
 ### ⏳ Phase 2: Hardware Integration (IN PROGRESS)
-**Status**: 60% Complete (awaiting hardware deliveries)
-**Target**: 1-2 weeks
+**Status**: 75% Complete (servos calibrated, awaiting NeoPixels)
+**Target**: 1 week
 
 #### Immediate Tasks (<30 minutes)
 
@@ -52,14 +52,14 @@
 
 #### Short-Term Tasks (1-2 weeks)
 
-- [ ] **Physical Servo Testing** [1 hour] 🔴 HIGH PRIORITY
-  - Connect servos to GPIO 17, 27, 22
-  - Run `tests/test_servos.py`
-  - Verify smooth movement
-  - Test all 24 expressions
-  - Calibrate positions
-  - **Blocker**: 🔧 Servo hardware not arrived
-  - **Dependencies**: Servo delivery
+- [x] **Physical Servo Testing** [COMPLETE 2025-11-08] ✅
+  - Connected servos to GPIO 17, 27, 22
+  - Full physical calibration with MG90S analog servos
+  - Calibrated ranges: Left (0-75°), Right (0-75°), Mouth (0-60°)
+  - Symmetric eye movement achieved
+  - All servo functions tested and operational
+  - Calibration data stored in `calibration_data/`
+  - Ready for expression integration
 
 - [ ] **NeoPixel Ring Testing** [1 hour] 🔴 HIGH PRIORITY
   - Connect Pico 2 via USB

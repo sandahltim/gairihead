@@ -1,0 +1,7 @@
+MOUTH SERVO CALIBRATION DATA
+======================================================================
+
+fully closed: 0.000
+partial open: -0.200
+more than partial open: -0.400
+fully open: -0.600

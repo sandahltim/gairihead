@@ -108,6 +108,72 @@ class ServoController:
         # Convert to -1 to 1 range
         return (normalized * 2) - 1
 
+    def angle_to_servo_value_left_eye(self, angle):
+        """
+        CALIBRATED mapping for left eyelid (MG90S servo on GPIO 17)
+
+        Physical calibration data from precise_servo_calibration.py:
+        - 0° (fully closed) → servo 0.100
+        - 75° (fully open)  → servo -0.310
+        - Working range: 0.410 span
+
+        Note: Using 75° as max instead of 90° due to mechanism physical limit
+        """
+        # Clamp to physical range
+        angle = max(0, min(75, angle))
+
+        # Normalize to 0-1 (0° = 0, 75° = 1)
+        normalized = angle / 75.0
+
+        # Map to calibrated servo range: 0.100 to -0.310
+        servo_value = 0.100 - (normalized * 0.410)
+
+        return servo_value
+
+    def angle_to_servo_value_right_eye(self, angle):
+        """
+        CALIBRATED mapping for right eyelid (MG90S servo on GPIO 27)
+
+        Uses INVERTED left eye calibration for symmetric movement
+        - Left eye: 0.100 (closed) to -0.310 (open)
+        - Right eye: -0.100 (closed) to 0.310 (open) [MIRRORED]
+        - Working range: 0.410 span (SAME as left eye)
+
+        Note: Right eye servo is mechanically identical but mounted opposite
+        """
+        # Clamp to physical range
+        angle = max(0, min(75, angle))
+
+        # Normalize to 0-1 (0° = 0, 75° = 1)
+        normalized = angle / 75.0
+
+        # Inverted left eye formula: -(0.100 - (normalized * 0.410))
+        servo_value = -0.100 + (normalized * 0.410)
+
+        return servo_value
+
+    def angle_to_servo_value_mouth(self, angle):
+        """
+        CALIBRATED mapping for mouth (MG90S servo on GPIO 22)
+
+        Physical calibration data from precise_servo_calibration.py:
+        - 0° (fully closed) → servo 0.000
+        - 60° (fully open)  → servo -0.600
+        - Working range: 0.600 span
+
+        Note: Mouth uses 0-60° range (smaller than eyes' 0-75°)
+        """
+        # Clamp to physical range
+        angle = max(0, min(60, angle))
+
+        # Normalize to 0-1 (0° = 0, 60° = 1)
+        normalized = angle / 60.0
+
+        # Map to calibrated servo range: 0.000 to -0.600
+        servo_value = 0.000 - (normalized * 0.600)
+
+        return servo_value
+
     # =========================================================================
     # SMOOTH MOVEMENT & EASING
     # =========================================================================
@@ -197,54 +263,49 @@ class ServoController:
 
     def set_left_eyelid(self, angle, smooth=True, duration=0.25):
         """
-        Set left eyelid angle (0=closed, 90=wide open)
+        Set left eyelid angle (0=closed, 75=wide open)
+
+        CALIBRATED for MG90S servo on GPIO 17
+        Uses precise calibration data from physical testing
 
         Args:
-            angle: Target angle
+            angle: Target angle (0-75°)
             smooth: Use smooth interpolation
             duration: Transition duration if smooth
         """
-        angle = max(self.left_config['min_angle'],
-                   min(angle, self.left_config['max_angle']))
+        # Clamp to calibrated physical range (0-75°)
+        angle = max(0, min(75, angle))
 
         with self.movement_lock:
             if smooth:
-                # Convert angles to servo values
-                current_value = self.angle_to_servo_value(
-                    self.current_left,
-                    self.left_config['min_angle'],
-                    self.left_config['max_angle']
-                )
-                target_value = self.angle_to_servo_value(
-                    angle,
-                    self.left_config['min_angle'],
-                    self.left_config['max_angle']
-                )
+                # Use CALIBRATED mapping
+                current_value = self.angle_to_servo_value_left_eye(self.current_left)
+                target_value = self.angle_to_servo_value_left_eye(angle)
+
                 # Smooth transition
                 self._smooth_transition(self.left_eyelid, target_value,
                                        current_value, duration)
             else:
-                # Instant
-                value = self.angle_to_servo_value(
-                    angle,
-                    self.left_config['min_angle'],
-                    self.left_config['max_angle']
-                )
+                # Instant - use CALIBRATED mapping
+                value = self.angle_to_servo_value_left_eye(angle)
                 self.left_eyelid.value = value
 
             self.current_left = angle
 
     def set_right_eyelid(self, angle, smooth=True, duration=0.25):
         """
-        Set right eyelid angle (0=closed, 90=wide open)
+        Set right eyelid angle (0=closed, 75=wide open)
+
+        CALIBRATED for MG90S servo on GPIO 27
+        Uses precise calibration data from physical testing
 
         Args:
-            angle: Target angle
+            angle: Target angle (0-75°)
             smooth: Use smooth interpolation
             duration: Transition duration if smooth
         """
-        angle = max(self.right_config['min_angle'],
-                   min(angle, self.right_config['max_angle']))
+        # Clamp to calibrated physical range (0-75°)
+        angle = max(0, min(75, angle))
 
         # Lazy eye delay if enabled
         if self.lazy_eye_enabled and smooth:
@@ -252,24 +313,16 @@ class ServoController:
 
         with self.movement_lock:
             if smooth:
-                current_value = self.angle_to_servo_value(
-                    self.current_right,
-                    self.right_config['min_angle'],
-                    self.right_config['max_angle']
-                )
-                target_value = self.angle_to_servo_value(
-                    angle,
-                    self.right_config['min_angle'],
-                    self.right_config['max_angle']
-                )
+                # Use CALIBRATED mapping
+                current_value = self.angle_to_servo_value_right_eye(self.current_right)
+                target_value = self.angle_to_servo_value_right_eye(angle)
+
+                # Smooth transition
                 self._smooth_transition(self.right_eyelid, target_value,
                                        current_value, duration)
             else:
-                value = self.angle_to_servo_value(
-                    angle,
-                    self.right_config['min_angle'],
-                    self.right_config['max_angle']
-                )
+                # Instant - use CALIBRATED mapping
+                value = self.angle_to_servo_value_right_eye(angle)
                 self.right_eyelid.value = value
 
             self.current_right = angle
@@ -278,34 +331,29 @@ class ServoController:
         """
         Set mouth angle (0=closed, 60=wide open)
 
+        CALIBRATED for MG90S servo on GPIO 22
+        Uses precise calibration data from physical testing
+
         Args:
-            angle: Target angle
+            angle: Target angle (0-60°)
             smooth: Use smooth interpolation
             duration: Transition duration if smooth
         """
-        angle = max(self.mouth_config['min_angle'],
-                   min(angle, self.mouth_config['max_angle']))
+        # Clamp to calibrated physical range (0-60°)
+        angle = max(0, min(60, angle))
 
         with self.movement_lock:
             if smooth:
-                current_value = self.angle_to_servo_value(
-                    self.current_mouth,
-                    self.mouth_config['min_angle'],
-                    self.mouth_config['max_angle']
-                )
-                target_value = self.angle_to_servo_value(
-                    angle,
-                    self.mouth_config['min_angle'],
-                    self.mouth_config['max_angle']
-                )
+                # Use CALIBRATED mapping
+                current_value = self.angle_to_servo_value_mouth(self.current_mouth)
+                target_value = self.angle_to_servo_value_mouth(angle)
+
+                # Smooth transition
                 self._smooth_transition(self.mouth, target_value,
                                        current_value, duration)
             else:
-                value = self.angle_to_servo_value(
-                    angle,
-                    self.mouth_config['min_angle'],
-                    self.mouth_config['max_angle']
-                )
+                # Instant - use CALIBRATED mapping
+                value = self.angle_to_servo_value_mouth(angle)
                 self.mouth.value = value
 
             self.current_mouth = angle

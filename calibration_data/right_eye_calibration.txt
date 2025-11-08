@@ -1,0 +1,6 @@
+RIGHT EYE SERVO CALIBRATION DATA
+======================================================================
+
+closed tight: -0.200
+fully open no twitch: 0.500
+half open: 0.200

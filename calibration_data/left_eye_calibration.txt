@@ -1,0 +1,7 @@
+LEFT EYE SERVO CALIBRATION DATA
+======================================================================
+
+fully closed: 0.000
+fully closed tight no twitch: 0.100
+fully open no twitch: -0.310
+half open: -0.200

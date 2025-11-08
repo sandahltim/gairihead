@@ -1,6 +1,6 @@
 # GairiHead Project Status
-**Last Updated**: 2025-11-07
-**Version**: v2.1 (Complete Hardware Integration)
+**Last Updated**: 2025-11-08
+**Version**: v2.2 (Servo Calibration Complete)
 **Project Phase**: Production Ready - All Core Systems Operational
 
 ---
@@ -67,12 +67,19 @@ cd ~/GairiHead && venv/bin/python main.py --mode continuous --interval 10
 - **Training**: Ready to load face encodings (needs Tim's photos)
 - **Remote Capture**: Works via Gary server `gary_head` tool
 
-### Servo Control (Hardware Tested)
-- **Servos**: 3x SG90 micro servos (GPIO 17, 27, 22)
-- **Library**: lgpio (Pi 5 compatible)
+### Servo Control (Fully Calibrated ✅)
+- **Servos**: 3x MG90S analog servos (metal gear, 9g micro)
+  - Left eyelid: GPIO 17 (0-75°, range: 0.100 → -0.310)
+  - Right eyelid: GPIO 27 (0-75°, range: -0.100 → 0.310, inverted for symmetry)
+  - Mouth: GPIO 22 (0-60°, range: 0.000 → -0.600)
+- **Library**: lgpio (Pi 5 compatible, gpiozero framework)
+- **Calibration**: Physical calibration complete (2025-11-08)
+  - Data stored in `calibration_data/`
+  - Hardcoded in `src/servo_controller.py`
+  - Symmetric eye movement achieved
 - **Expressions**: 24 pre-defined expressions (happy, sad, alert, sarcasm, etc.)
 - **Integration**: Expression engine updates Arduino display in real-time
-- **Power**: Currently using GPIO power (5V/2A external supply ordered)
+- **Power**: Currently using GPIO power (digital servos arriving for improved precision)
 
 ### LLM Intelligence (Two-Tier System)
 - **Local LLM**: Llama 3.2 3B via Ollama (60% of queries)
@@ -99,7 +106,7 @@ cd ~/GairiHead && venv/bin/python main.py --mode continuous --interval 10
 - **TP28017 TFT Display**: 2.8" touchscreen (240x320, ILI9341 controller)
 - **USB Webcam**: C920 equivalent (/dev/video0, 1920x1080)
 - **USB Microphone**: C920 built-in mic (hw:2,0, 2 channels, 16kHz)
-- **3x SG90 Servos**: GPIO 17, 27, 22 (tested, operational)
+- **3x MG90S Servos**: GPIO 17, 27, 22 (fully calibrated, operational ✅)
 
 ### Ordered & In Transit
 - **Raspberry Pi Pico 2 W**: For NeoPixel eye control (ordered)

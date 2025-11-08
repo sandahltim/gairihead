@@ -17,13 +17,13 @@ hardware:
     left_eyelid:
       gpio_pin: 17      # Safe pin, away from M.2 HAT
       min_angle: 0
-      max_angle: 90
-      neutral_angle: 45
+      max_angle: 75     # CALIBRATED: Physical mechanism limit (not 90°)
+      neutral_angle: 55 # CALIBRATED: Half-open position from testing
     right_eyelid:
       gpio_pin: 27      # Safe pin, away from M.2 HAT
       min_angle: 0
-      max_angle: 90
-      neutral_angle: 45
+      max_angle: 75     # CALIBRATED: Physical mechanism limit (not 90°)
+      neutral_angle: 55 # CALIBRATED: Half-open position from testing
     mouth:
       gpio_pin: 22      # Safe pin, away from M.2 HAT
       min_angle: 0      # Closed
