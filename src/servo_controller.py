@@ -79,6 +79,10 @@ class ServoController:
         self.lazy_eye_enabled = False  # Slight lag between eyes for character
         self.lazy_eye_delay = 0.05  # seconds
 
+        # Speech animation
+        self.speech_animation_active = False
+        self._speech_animation_thread = None
+
         # Set to neutral
         self.reset_to_neutral()
 
@@ -528,8 +532,81 @@ class ServoController:
 
         logger.info(f"Expression set: {expression_name}")
 
+    def start_speech_animation(self, base_amplitude: float = 0.3):
+        """
+        Start animating mouth during speech
+
+        Args:
+            base_amplitude: Base amplitude for mouth movement (0.0-1.0)
+        """
+        if self.speech_animation_active:
+            logger.debug("Speech animation already active")
+            return
+
+        self.speech_animation_active = True
+        self._speech_animation_thread = threading.Thread(
+            target=self._speech_animation_loop,
+            args=(base_amplitude,),
+            daemon=True
+        )
+        self._speech_animation_thread.start()
+        logger.debug("Speech animation started")
+
+    def stop_speech_animation(self):
+        """Stop mouth animation and return to neutral"""
+        if not self.speech_animation_active:
+            return
+
+        self.speech_animation_active = False
+
+        # Wait for thread to finish
+        if self._speech_animation_thread:
+            self._speech_animation_thread.join(timeout=1.0)
+
+        # Return mouth to neutral
+        self.set_mouth(self.mouth_config['neutral_angle'], smooth=True, duration=0.3)
+        logger.debug("Speech animation stopped")
+
+    def _speech_animation_loop(self, base_amplitude: float):
+        """
+        Animate mouth during speech with natural talking motion
+
+        Args:
+            base_amplitude: Base amplitude for mouth movement
+        """
+        neutral = self.mouth_config['neutral_angle']
+        max_open = self.mouth_config['max_angle']
+
+        # Calculate movement range
+        mouth_range = int((max_open - neutral) * base_amplitude)
+
+        frame = 0
+        while self.speech_animation_active:
+            # Create natural talking motion using sine wave with variation
+            # Use multiple frequencies for more natural movement
+            primary_wave = math.sin(frame * 0.5)  # Primary talking motion
+            secondary_wave = math.sin(frame * 0.3) * 0.3  # Secondary variation
+            noise = random.uniform(-0.1, 0.1)  # Small random variation
+
+            # Combine waves
+            combined = (primary_wave + secondary_wave + noise) * 0.5 + 0.5  # Normalize to 0-1
+
+            # Calculate mouth position
+            mouth_pos = neutral + int(mouth_range * combined)
+            mouth_pos = max(neutral, min(max_open, mouth_pos))  # Clamp
+
+            # Set mouth position (fast, no smoothing for responsive animation)
+            with self.movement_lock:
+                self.set_mouth(mouth_pos, smooth=False)
+
+            frame += 1
+            time.sleep(0.05)  # 20 FPS animation
+
     def cleanup(self):
         """Clean up GPIO resources"""
+        # Stop any active animations
+        self.stop_speech_animation()
+
         self.left_eyelid.close()
         self.right_eyelid.close()
         self.mouth.close()

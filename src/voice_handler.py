@@ -348,7 +348,7 @@ class VoiceHandler:
 
     def speak(self, text: str) -> bool:
         """
-        Speak text using TTS (Piper or pyttsx3)
+        Speak text using TTS (Piper or pyttsx3) with mouth animation
 
         Args:
             text: Text to speak
@@ -362,22 +362,34 @@ class VoiceHandler:
             logger.info(f"🔊 Speaking: \"{text[:50]}{'...' if len(text) > 50 else ''}\"")
             start_time = time.time()
 
-            if self.tts_engine == 'piper' and self.piper_voice:
-                # Use Piper TTS
-                audio_bytes = bytearray()
-                for chunk in self.piper_voice.synthesize(text):
-                    audio_bytes.extend(chunk.audio_int16_bytes)
+            # Start mouth animation if servo controller available
+            servo_controller = None
+            if self.expression_engine and hasattr(self.expression_engine, 'servo_controller'):
+                servo_controller = self.expression_engine.servo_controller
+                if servo_controller:
+                    servo_controller.start_speech_animation(base_amplitude=0.4)
 
-                # Play audio directly with sounddevice
-                audio_array = np.frombuffer(bytes(audio_bytes), dtype=np.int16)
-                audio_float = audio_array.astype(np.float32) / 32767.0
+            try:
+                if self.tts_engine == 'piper' and self.piper_voice:
+                    # Use Piper TTS
+                    audio_bytes = bytearray()
+                    for chunk in self.piper_voice.synthesize(text):
+                        audio_bytes.extend(chunk.audio_int16_bytes)
 
-                sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
-                sd.wait()
-            else:
-                # Use pyttsx3
-                self.tts_engine.say(text)
-                self.tts_engine.runAndWait()
+                    # Play audio directly with sounddevice
+                    audio_array = np.frombuffer(bytes(audio_bytes), dtype=np.int16)
+                    audio_float = audio_array.astype(np.float32) / 32767.0
+
+                    sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
+                    sd.wait()
+                else:
+                    # Use pyttsx3
+                    self.tts_engine.say(text)
+                    self.tts_engine.runAndWait()
+            finally:
+                # Stop mouth animation
+                if servo_controller:
+                    servo_controller.stop_speech_animation()
 
             speak_time = int((time.time() - start_time) * 1000)
             self.stats['tts_successes'] += 1
