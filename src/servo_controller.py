@@ -532,12 +532,13 @@ class ServoController:
 
         logger.info(f"Expression set: {expression_name}")
 
-    def start_speech_animation(self, base_amplitude: float = 0.3):
+    def start_speech_animation(self, base_amplitude: float = 0.7, max_angle_override: int = None):
         """
         Start animating mouth during speech
 
         Args:
-            base_amplitude: Base amplitude for mouth movement (0.0-1.0)
+            base_amplitude: Base amplitude for mouth movement (0.0-1.0) - from expressions.yaml sensitivity
+            max_angle_override: Override max angle (from expressions.yaml speaking.mouth.max_angle)
         """
         if self.speech_animation_active:
             logger.debug("Speech animation already active")
@@ -546,11 +547,11 @@ class ServoController:
         self.speech_animation_active = True
         self._speech_animation_thread = threading.Thread(
             target=self._speech_animation_loop,
-            args=(base_amplitude,),
+            args=(base_amplitude, max_angle_override),
             daemon=True
         )
         self._speech_animation_thread.start()
-        logger.debug("Speech animation started")
+        logger.debug(f"Speech animation started (amplitude={base_amplitude}, max_angle={max_angle_override or 'default'})")
 
     def stop_speech_animation(self):
         """Stop mouth animation and return to neutral"""
@@ -567,17 +568,19 @@ class ServoController:
         self.set_mouth(self.mouth_config['neutral_angle'], smooth=True, duration=0.3)
         logger.debug("Speech animation stopped")
 
-    def _speech_animation_loop(self, base_amplitude: float):
+    def _speech_animation_loop(self, base_amplitude: float, max_angle_override: int = None):
         """
         Animate mouth during speech with natural talking motion
 
         Args:
-            base_amplitude: Base amplitude for mouth movement
+            base_amplitude: Base amplitude for mouth movement (sensitivity from expressions.yaml)
+            max_angle_override: Override max angle from speaking expression config
         """
         neutral = self.mouth_config['neutral_angle']
-        max_open = self.mouth_config['max_angle']
+        # Use override from speaking expression if provided, otherwise use servo max
+        max_open = max_angle_override if max_angle_override is not None else self.mouth_config['max_angle']
 
-        # Calculate movement range
+        # Calculate movement range based on calibrated values
         mouth_range = int((max_open - neutral) * base_amplitude)
 
         frame = 0

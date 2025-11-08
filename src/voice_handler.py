@@ -363,11 +363,21 @@ class VoiceHandler:
             start_time = time.time()
 
             # Start mouth animation if servo controller available
+            # Use calibrated values from speaking expression
             servo_controller = None
             if self.expression_engine and hasattr(self.expression_engine, 'servo_controller'):
                 servo_controller = self.expression_engine.servo_controller
                 if servo_controller:
-                    servo_controller.start_speech_animation(base_amplitude=0.4)
+                    # Get sensitivity from speaking expression (default 0.7)
+                    speaking_expr = self.expression_engine.expressions.get('speaking', {})
+                    mouth_config = speaking_expr.get('mouth', {})
+                    sensitivity = mouth_config.get('sensitivity', 0.7)
+                    max_angle = mouth_config.get('max_angle', 50)
+
+                    servo_controller.start_speech_animation(
+                        base_amplitude=sensitivity,
+                        max_angle_override=max_angle
+                    )
 
             try:
                 if self.tts_engine == 'piper' and self.piper_voice:
