@@ -110,7 +110,7 @@ vision:
 
   face_recognition:
     enabled: true
-    known_faces_dir: "/Gary/GairiHead/data/faces"
+    known_faces_dir: "/home/tim/GairiHead/data/known_faces"
     tolerance: 0.6
 
   tracking:

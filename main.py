@@ -68,6 +68,9 @@ class GairiHeadAssistant:
         # State
         self.running = False
         self.interaction_count = 0
+        self.in_interaction = False  # Prevent overlapping interactions
+        self.last_interaction_time = 0  # Timestamp of last interaction
+        self.interaction_cooldown = 2.0  # Seconds to wait between interactions
         
     async def initialize(self) -> bool:
         """
@@ -260,6 +263,19 @@ class GairiHeadAssistant:
     
     async def handle_interaction(self):
         """Handle a single voice interaction with proper UX flow"""
+        # Check if already in interaction (prevent overlapping)
+        if self.in_interaction:
+            logger.debug("Already in interaction, ignoring trigger")
+            return
+
+        # Check cooldown period
+        time_since_last = time.time() - self.last_interaction_time
+        if time_since_last < self.interaction_cooldown:
+            logger.debug(f"Cooldown active ({time_since_last:.1f}s < {self.interaction_cooldown}s), ignoring trigger")
+            return
+
+        # Mark as in interaction
+        self.in_interaction = True
         self.interaction_count += 1
 
         logger.info(f"\n{'=' * 60}")
@@ -339,6 +355,10 @@ class GairiHeadAssistant:
                 self.expression_engine.set_expression('idle')
             except:
                 pass
+
+        # Mark interaction complete and update timestamp
+        self.in_interaction = False
+        self.last_interaction_time = time.time()
     
     async def run_interactive_mode(self):
         """
