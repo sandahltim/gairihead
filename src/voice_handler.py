@@ -321,6 +321,14 @@ class VoiceHandler:
                 response_time=response_time
             )
 
+            # Also update debug page data (PAGE 3)
+            self.arduino_display.show_debug(
+                tier=tier,
+                tool="voice_pipeline",
+                training_logged=True,  # Gary server handles training
+                response_time=response_time
+            )
+
         # Step 3: Speak response (with expression engine sync)
         if self.expression_engine:
             try:
