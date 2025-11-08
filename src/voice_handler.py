@@ -31,6 +31,7 @@ import tempfile
 from pathlib import Path
 from loguru import logger
 from typing import Optional, Dict, Tuple
+import webrtcvad
 
 # Try to import Piper, fall back to pyttsx3 if not available
 try:
@@ -64,6 +65,12 @@ class VoiceHandler:
         self.chunk_size = self.config.get('microphone', {}).get('chunk_size', 1024)
         self.device_index = self.config.get('microphone', {}).get('device_index', None)
 
+        # VAD settings
+        self.vad_enabled = self.config.get('vad', {}).get('enabled', True)
+        self.vad_aggressiveness = self.config.get('vad', {}).get('aggressiveness', 2)
+        self.vad_silence_duration = self.config.get('vad', {}).get('silence_duration', 1.5)
+        self.vad_max_duration = self.config.get('vad', {}).get('max_duration', 30.0)
+
         # Whisper STT
         self.whisper_model = None
         self.whisper_model_name = self.config.get('stt', {}).get('model', 'tiny')
@@ -80,7 +87,8 @@ class VoiceHandler:
 
         transcription_method = "Gary server (remote)" if self.use_remote_transcription else f"Local (Whisper {self.whisper_model_name})"
         tts_method = "Piper (neural)" if self.tts_engine_type == 'piper' and PIPER_AVAILABLE else "pyttsx3 (espeak)"
-        logger.info(f"VoiceHandler v1.0 initialized (STT: {transcription_method}, TTS: {tts_method})")
+        vad_status = f"VAD enabled ({self.vad_silence_duration}s silence)" if self.vad_enabled else "Fixed duration"
+        logger.info(f"VoiceHandler v1.0 initialized (STT: {transcription_method}, TTS: {tts_method}, Recording: {vad_status})")
 
         # Statistics
         self.stats = {
@@ -131,7 +139,7 @@ class VoiceHandler:
 
     def record_audio(self, duration: float = 3.0, silence_threshold: float = 0.01) -> Optional[np.ndarray]:
         """
-        Record audio from microphone
+        Record audio from microphone (fixed duration - for backwards compatibility)
 
         Args:
             duration: Recording duration in seconds
@@ -169,6 +177,119 @@ class VoiceHandler:
 
         except Exception as e:
             logger.error(f"❌ Audio recording failed: {e}")
+            return None
+
+    def record_audio_with_vad(self, max_duration: float = 30.0,
+                              silence_duration: float = 1.5,
+                              vad_aggressiveness: int = 2) -> Optional[np.ndarray]:
+        """
+        Record audio using Voice Activity Detection (VAD)
+        Automatically stops recording when user stops speaking
+
+        Args:
+            max_duration: Maximum recording time in seconds (safety limit)
+            silence_duration: Seconds of silence before stopping (e.g., 1.5s)
+            vad_aggressiveness: VAD sensitivity 0-3 (0=liberal, 3=aggressive)
+
+        Returns:
+            numpy array of audio samples (16kHz mono) or None if failed
+        """
+        try:
+            self.stats['total_recordings'] += 1
+
+            # Initialize WebRTC VAD
+            vad = webrtcvad.Vad(vad_aggressiveness)
+
+            # VAD frame parameters (must be 10, 20, or 30ms)
+            frame_duration_ms = 30  # 30ms frames
+            frame_size = int(self.sample_rate * frame_duration_ms / 1000)  # samples per frame
+            bytes_per_frame = frame_size * 2  # 16-bit = 2 bytes per sample
+
+            # Recording state
+            audio_buffer = []
+            silence_frames = 0
+            silence_threshold_frames = int(silence_duration * 1000 / frame_duration_ms)
+            speech_detected = False
+            max_frames = int(max_duration * 1000 / frame_duration_ms)
+
+            logger.info(f"🎤 Recording with VAD (stops after {silence_duration}s silence, max {max_duration}s)...")
+            logger.info("   Speak now...")
+            start_time = time.time()
+
+            # Start audio stream
+            stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype=np.int16,  # VAD requires 16-bit PCM
+                device=self.device_index,
+                blocksize=frame_size
+            )
+            stream.start()
+
+            frame_count = 0
+            try:
+                while frame_count < max_frames:
+                    # Read one frame
+                    frame_data, overflowed = stream.read(frame_size)
+
+                    if overflowed:
+                        logger.warning("⚠️ Audio buffer overflow (processing too slow)")
+
+                    # Convert to bytes for VAD
+                    frame_bytes = frame_data.tobytes()
+
+                    # Check if this frame contains speech
+                    is_speech = vad.is_speech(frame_bytes, self.sample_rate)
+
+                    if is_speech:
+                        speech_detected = True
+                        silence_frames = 0
+                        audio_buffer.append(frame_data)
+                    else:
+                        # Silence detected
+                        if speech_detected:
+                            # Only count silence after we've detected speech
+                            silence_frames += 1
+                            audio_buffer.append(frame_data)  # Still collect during silence
+
+                            # Stop if we've had enough silence
+                            if silence_frames >= silence_threshold_frames:
+                                logger.info(f"   Detected {silence_duration}s silence after speech, stopping...")
+                                break
+                        # else: silence before speech started, ignore
+
+                    frame_count += 1
+
+            finally:
+                stream.stop()
+                stream.close()
+
+            # Check if we got any speech
+            if not speech_detected:
+                logger.warning("⚠️ No speech detected")
+                return None
+
+            # Combine all frames into single numpy array
+            if not audio_buffer:
+                logger.warning("⚠️ No audio collected")
+                return None
+
+            # Concatenate all frames
+            audio_int16 = np.concatenate(audio_buffer, axis=0).squeeze()
+
+            # Convert to float32 (for compatibility with Whisper)
+            audio_float32 = audio_int16.astype(np.float32) / 32768.0
+
+            # Calculate stats
+            record_time = int((time.time() - start_time) * 1000)
+            duration_recorded = len(audio_float32) / self.sample_rate
+            rms = np.sqrt(np.mean(audio_float32 ** 2))
+
+            logger.success(f"✅ Audio recorded ({record_time}ms, {duration_recorded:.1f}s, RMS: {rms:.4f})")
+            return audio_float32
+
+        except Exception as e:
+            logger.error(f"❌ VAD recording failed: {e}")
             return None
 
     def transcribe_audio(self, audio: np.ndarray, authorization: Optional[Dict] = None) -> Optional[str]:
@@ -268,14 +389,15 @@ class VoiceHandler:
             self.stats['tts_failures'] += 1
             return False
 
-    def process_voice_query(self, duration: float = 3.0, authorization: Optional[Dict] = None, expression: str = 'listening') -> Optional[str]:
+    def process_voice_query(self, use_vad: bool = True, duration: float = 3.0, authorization: Optional[Dict] = None, expression: str = 'listening') -> Optional[str]:
         """
         Complete voice interaction: record → process (transcribe + query) → speak
 
         OPTIMIZED: Single call to Gary for transcription + LLM processing
 
         Args:
-            duration: Recording duration in seconds
+            use_vad: Use Voice Activity Detection (auto-stop when done speaking)
+            duration: Recording duration in seconds (only used if use_vad=False)
             authorization: Authorization context for LLM query
             expression: Current expression state (for display)
 
@@ -298,8 +420,19 @@ class VoiceHandler:
                 expression="listening"
             )
 
-        # Step 1: Record audio
-        audio = self.record_audio(duration)
+        # Step 1: Record audio (with VAD or fixed duration)
+        # Use VAD if enabled in config (unless explicitly overridden)
+        use_vad_final = use_vad and self.vad_enabled
+
+        if use_vad_final:
+            audio = self.record_audio_with_vad(
+                max_duration=self.vad_max_duration,
+                silence_duration=self.vad_silence_duration,
+                vad_aggressiveness=self.vad_aggressiveness
+            )
+        else:
+            audio = self.record_audio(duration)
+
         if audio is None:
             logger.error("Voice query failed: No audio recorded")
             if self.expression_engine:

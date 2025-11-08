@@ -89,6 +89,12 @@ voice:
     sample_rate: 16000
     chunk_size: 1024
 
+  vad:  # Voice Activity Detection (auto-stop when done talking)
+    enabled: true           # Use VAD instead of fixed recording time
+    aggressiveness: 2       # VAD sensitivity 0-3 (0=liberal, 3=aggressive)
+    silence_duration: 1.5   # Seconds of silence before stopping
+    max_duration: 30.0      # Maximum recording time (safety limit)
+
   speaker:
     device_index: 0    # Default USB speaker
     volume: 0.8
