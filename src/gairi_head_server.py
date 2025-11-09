@@ -17,6 +17,7 @@ import json
 import base64
 import io
 import time
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any
 import websockets
@@ -56,6 +57,18 @@ class GairiHeadServer:
 
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
+
+        # Security: API token authentication
+        # Token can be set via environment variable or config file
+        self.api_token = os.environ.get('GAIRIHEAD_API_TOKEN')
+        if not self.api_token:
+            # Try to load from config
+            self.api_token = self.config.get('server', {}).get('api_token')
+
+        if self.api_token:
+            logger.info("🔒 WebSocket authentication enabled")
+        else:
+            logger.warning("⚠️  No API token configured - authentication disabled (INSECURE!)")
 
         # Hardware managers (lazy init)
         self.camera_manager = None
@@ -145,6 +158,75 @@ class GairiHeadServer:
             logger.info("Expression engine initialized")
         return self.expression_engine
 
+    # Allowed actions (whitelist)
+    ALLOWED_ACTIONS = {
+        'capture_snapshot', 'record_audio', 'analyze_scene', 'get_status',
+        'set_expression', 'detect_faces', 'speak', 'blink', 'test_sync'
+    }
+
+    def _validate_command(self, command: Dict[str, Any]) -> Optional[str]:
+        """
+        Validate command structure and parameters
+
+        Args:
+            command: Command dict to validate
+
+        Returns:
+            Error message if invalid, None if valid
+        """
+        # Check action exists
+        action = command.get('action')
+        if not action:
+            return "Missing required field: 'action'"
+
+        # Check action is string
+        if not isinstance(action, str):
+            return "Field 'action' must be a string"
+
+        # Check action is in whitelist
+        if action not in self.ALLOWED_ACTIONS:
+            return f"Unknown action: {action}. Allowed: {', '.join(sorted(self.ALLOWED_ACTIONS))}"
+
+        # Validate params
+        params = command.get('params', {})
+        if not isinstance(params, dict):
+            return "Field 'params' must be a dictionary"
+
+        # Action-specific validation
+        if action == 'speak':
+            text = params.get('text')
+            if not text:
+                return "Missing required parameter 'text' for speak action"
+            if not isinstance(text, str):
+                return "Parameter 'text' must be a string"
+            if len(text) > 5000:  # Max 5000 characters
+                return "Parameter 'text' exceeds maximum length (5000 characters)"
+
+        elif action == 'set_expression':
+            expression = params.get('expression')
+            if not expression:
+                return "Missing required parameter 'expression' for set_expression action"
+            if not isinstance(expression, str):
+                return "Parameter 'expression' must be a string"
+            if len(expression) > 50:
+                return "Parameter 'expression' too long (max 50 characters)"
+
+        elif action == 'record_audio':
+            duration = params.get('duration', 3)
+            if not isinstance(duration, (int, float)):
+                return "Parameter 'duration' must be a number"
+            if duration < 0.1 or duration > 60:
+                return "Parameter 'duration' must be between 0.1 and 60 seconds"
+
+        elif action == 'capture_snapshot':
+            quality = params.get('quality', 85)
+            if not isinstance(quality, int):
+                return "Parameter 'quality' must be an integer"
+            if quality < 1 or quality > 100:
+                return "Parameter 'quality' must be between 1 and 100"
+
+        return None  # Valid
+
     async def handle_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handle incoming command from main Gary
@@ -155,6 +237,15 @@ class GairiHeadServer:
         Returns:
             Response dict with 'status', 'data', and optional 'error'
         """
+        # Validate command
+        validation_error = self._validate_command(command)
+        if validation_error:
+            logger.warning(f"Invalid command: {validation_error}")
+            return {
+                'status': 'error',
+                'error': validation_error
+            }
+
         action = command.get('action')
         params = command.get('params', {})
 
@@ -190,6 +281,7 @@ class GairiHeadServer:
                 return await self._handle_test_sync(params)
 
             else:
+                # Should never reach here due to validation
                 return {
                     'status': 'error',
                     'error': f'Unknown action: {action}'
@@ -619,6 +711,47 @@ class GairiHeadServer:
         client_addr = websocket.remote_address
         logger.info(f"Client connected: {client_addr}")
 
+        # Authentication check
+        authenticated = False
+        if self.api_token:
+            # Require authentication
+            try:
+                # Wait for auth message (first message must be auth)
+                auth_message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                auth_data = json.loads(auth_message)
+
+                # Check token
+                provided_token = auth_data.get('token')
+                if provided_token == self.api_token:
+                    authenticated = True
+                    logger.info(f"✅ Client authenticated: {client_addr}")
+                    # Send auth success
+                    await websocket.send(json.dumps({
+                        'status': 'authenticated',
+                        'message': 'Authentication successful'
+                    }))
+                else:
+                    logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid token")
+                    await websocket.send(json.dumps({
+                        'status': 'error',
+                        'error': 'Authentication failed: Invalid token'
+                    }))
+                    await websocket.close()
+                    return
+
+            except (asyncio.TimeoutError, json.JSONDecodeError, KeyError):
+                logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid auth message")
+                await websocket.send(json.dumps({
+                    'status': 'error',
+                    'error': 'Authentication failed: Invalid auth message'
+                }))
+                await websocket.close()
+                return
+        else:
+            # No token configured - allow all connections (insecure)
+            authenticated = True
+
+        # Main message loop (only reached if authenticated)
         try:
             async for message in websocket:
                 # Parse command

@@ -3,6 +3,17 @@
 
 version: "1.0"
 
+# WebSocket Server Configuration
+server:
+  # API Token for WebSocket authentication
+  # ⚠️ SECURITY: Change this token or use environment variable GAIRIHEAD_API_TOKEN
+  # Generate new token: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+  api_token: "av-UQ9Eh64ZcbRPadshCzpqiVkG5Rw2QxDTuJYRU__o"
+
+  # Server binding (0.0.0.0 = all interfaces, 127.0.0.1 = localhost only)
+  host: "0.0.0.0"
+  port: 8766
+
 # Hardware Configuration
 hardware:
   pi5:
@@ -43,23 +54,35 @@ hardware:
     timeout: 1.0
 
 # Intelligence Configuration
+# ARCHITECTURE: GairiHead = Hardware Interface → Gary Server = All Intelligence
+# - ALL transcription happens on Gary (faster-whisper)
+# - ALL LLM processing happens on Gary (Qwen local-tier + Haiku cloud-tier)
+# - GairiHead only sends audio/queries and receives responses
 intelligence:
   gary_websocket_url: "ws://100.106.44.11:8765/ws"  # Gary server WebSocket (Tailscale)
 
+  # Local LLM settings (CURRENTLY UNUSED - for future offline/backup capability)
+  # Gary handles ALL LLM processing. These settings preserved for:
+  # - Future offline mode if Gary unavailable
+  # - Potential use with hardware improvements
+  # - Local experimentation/testing
   local_llm:
-    enabled: true
+    enabled: false  # Currently disabled - Gary handles all LLM
     model: "llama3.2:3b"
     host: "http://localhost:11434"
     temperature: 0.7
     max_tokens: 150
     timeout: 5000  # ms
 
+  # Haiku settings (handled by Gary, not GairiHead)
+  # Gary makes tier selection decisions, not GairiHead
   haiku:
-    enabled: true
-    escalation_threshold: 0.7  # Confidence threshold
+    enabled: true  # Must be true for Gary to use Haiku tier
+    escalation_threshold: 0.7  # Gary uses this for tier decisions
     retry_attempts: 3
 
 # Voice Configuration
+# ARCHITECTURE NOTE: STT happens on Gary server, TTS happens locally on Pi
 voice:
   wake_word:
     enabled: true
@@ -68,10 +91,10 @@ voice:
     model: "porcupine"  # or "pocketsphinx"
 
   stt:
-    engine: "whisper"  # or "google", "vosk"
-    model: "tiny"      # tiny, base, small, medium (only used as fallback)
+    engine: "whisper"  # Gary uses faster-whisper (production), local Whisper is fallback
+    model: "tiny"      # Only used as fallback if Gary unavailable
     language: "en"
-    use_remote: true   # Use Gary server for transcription (MUCH faster!)
+    use_remote: true   # TRUE = Send to Gary (production), FALSE = local fallback
 
   tts:
     engine: "piper"    # Neural TTS (natural, not robotic!)

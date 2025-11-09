@@ -95,3 +95,4 @@ test_*_simple.py
 # Piper voice models (too large for git, download with script)
 data/piper_voices/*.onnx
 data/piper_voices/*.json
+.env

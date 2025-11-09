@@ -30,6 +30,7 @@ pyaudio>=0.2.14
 sounddevice>=0.4.6
 soundfile>=0.12.1
 wave>=0.0.2
+webrtcvad>=2.0.10  # Voice activity detection
 
 # LLM Integration
 ollama-python>=0.1.6  # Local LLM (Llama 3.2 3B)

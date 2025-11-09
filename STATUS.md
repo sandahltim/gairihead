@@ -23,10 +23,11 @@ GairiHead is a **fully operational** AI-powered desktop companion with personali
 ## What Works NOW ✅
 
 ### Voice Pipeline (Fully Operational)
-- **Speech-to-Text**: Whisper base model (139MB, 2.8s load, CPU-based)
-- **Text-to-Speech**: pyttsx3 + espeak-ng (working, no speakers = expected audio error)
-- **Microphone**: C920 built-in mic (captures audio, RMS: 0.027)
-- **LLM Integration**: Two-tier system (local Qwen + Gary/Haiku routing)
+- **Speech-to-Text**: Gary's faster-whisper (primary), local Whisper fallback (139MB)
+- **Text-to-Speech**: Piper neural TTS "joe" voice (local, audio-reactive mouth)
+- **Microphone**: C920 built-in mic (captures audio, VAD-based silence detection)
+- **LLM Integration**: Gary's two-tier system (Qwen local + Haiku cloud on Gary server)
+- **GairiHead Role**: Hardware I/O only (capture audio → send to Gary → speak response)
 - **Main Application**: 3 modes (interactive/continuous/test)
 
 **How to Use**:
@@ -81,13 +82,16 @@ cd ~/GairiHead && venv/bin/python main.py --mode continuous --interval 10
 - **Integration**: Expression engine updates Arduino display in real-time
 - **Power**: Currently using GPIO power (digital servos arriving for improved precision)
 
-### LLM Intelligence (Two-Tier System)
-- **Local LLM**: Llama 3.2 3B via Ollama (60% of queries)
-- **Cloud LLM**: Claude Haiku 3.5/4.5 via Gary server (40% of queries)
-- **Routing**: LLMTierManager handles escalation
-- **Authorization-Aware**: Adjusts capabilities based on user level
-- **Training**: Automatic data collection on Gary server
+### LLM Intelligence (Centralized on Gary Server)
+- **Architecture**: GairiHead = Hardware Interface → Gary Server = All AI Processing
+- **Gary's Local Tier**: Qwen 2.5 Coder 7B on Gary server (60% of queries)
+- **Gary's Cloud Tier**: Claude Haiku 4.5 via Gary server (40% of queries)
+- **GairiHead Role**: Sends audio/queries to Gary → Receives responses → Hardware output
+- **Routing**: Gary's LLMTierManager handles tier selection (not GairiHead)
+- **Authorization-Aware**: Adjusts capabilities based on face recognition level
+- **Training**: Automatic data collection on Gary server (Level 1 users only)
 - **Cost**: Target <$10/month (projected $5-8/month)
+- **Future**: Ollama config present on Pi for potential offline/backup capability
 
 ### Gary Server Integration (Complete)
 - **WebSocket Server**: gairi_head_server.py on port 8766
@@ -297,13 +301,16 @@ cd ~/GairiHead && venv/bin/python main.py --mode continuous --interval 10
 - **Microphone**: C920 built-in (sufficient quality for Whisper)
 
 ### Software
-- **Architecture**: Two-tier intelligence (local + cloud)
-- **Local LLM**: Llama 3.2 3B via Ollama (60% of queries)
-- **Cloud LLM**: Claude Haiku 3.5/4.5 (40% of queries, tool calling)
-- **Voice STT**: Whisper base model (good balance of speed/accuracy)
-- **Voice TTS**: pyttsx3 + espeak-ng (fast, offline)
+- **Architecture**: Thin client hardware interface delegating to Gary server
+- **Intelligence**: ALL processing on Gary (Qwen local-tier + Haiku cloud-tier)
+- **GairiHead Processing**: Only hardware control (voice I/O, camera, servos, display)
+- **Gary's Local Tier**: Qwen 2.5 Coder 7B on Gary (60% of queries)
+- **Gary's Cloud Tier**: Haiku 4.5 via Gary (40% of queries, tool calling)
+- **Voice STT**: Gary's faster-whisper (production), local Whisper fallback
+- **Voice TTS**: Piper neural TTS (local on Pi, audio-reactive mouth)
 - **Serial Protocol**: JSON over USB (115200 baud, 512-byte buffer)
 - **Display Loop Timing**: 10ms delay (5x faster than original 50ms)
+- **Future Capability**: Ollama on Pi for offline mode (currently unused)
 
 ### Cost Optimization
 - **Target**: <$10/month operating cost
@@ -347,10 +354,10 @@ cd ~/GairiHead && venv/bin/python main.py --mode continuous --interval 10
 - ✅ Arduino display shows conversations
 
 ### Phase 2: Intelligence ✅ COMPLETE
-- ✅ Local LLM handles simple queries (<1s response)
-- ✅ Haiku handles complex queries (<3s response)
-- ✅ Seamless escalation between tiers
-- ✅ Face recognition authorizes users
+- ✅ Gary's Qwen handles simple queries (<1s response over LAN)
+- ✅ Gary's Haiku handles complex queries (<3s response over LAN)
+- ✅ Seamless escalation between tiers (handled by Gary)
+- ✅ Face recognition authorizes users (GairiHead captures, Gary decides tier)
 
 ### Phase 3: Polish (In Progress)
 - ⏸️ NeoPixel eyes light up with smooth transitions

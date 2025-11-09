@@ -1,22 +1,38 @@
 #!/usr/bin/env python3
 """
-GairiHead Voice Assistant - Main Application
+GairiHead Voice Assistant - Main Application (Hardware Controller)
+
+ARCHITECTURE (Clarified):
+- GairiHead = Hardware Interface (THIS APP - camera, mic, speaker, servos, display)
+- Gary Server = ALL Intelligence (STT, LLM tiers, training data)
+- This app: Orchestrates hardware → Routes to Gary → Outputs responses
 
 Version: 1.0 (2025-11-07)
-Purpose: Complete voice assistant with face recognition authorization
+Purpose: Hardware orchestration for voice assistant with face recognition
+
+Hardware:
+- Microphone: USB EMEET OfficeCore M0 Plus
+- Speaker: USB EMEET OfficeCore M0 Plus
+- Camera: Pi Camera Module 3 (when it arrives), USB webcam (current)
+- Servos: 3x MG90S (GPIO 17, 27, 22)
+- Display: Arduino Mega 2560 + TP28017 2.8" TFT
 
 Flow:
-1. Initialize components (camera, voice, LLM, face recognition)
-2. Wait for interaction trigger (button press or face detection)
-3. Capture face → Determine authorization level
-4. Listen to voice query
-5. Process through Gary (with authorization context)
-6. Speak response
-7. Log training data (server-side)
+1. Initialize hardware components (camera, voice, servos, display)
+2. Wait for interaction trigger (button press or continuous mode)
+3. Capture face → Determine authorization level (Level 1-3)
+4. Record audio from mic
+5. Send audio + authorization to Gary server via WebSocket
+6. Gary processes (STT + LLM tier selection + response)
+7. Receive response from Gary
+8. Speak response via TTS + animate mouth servo
+9. Update Arduino display with conversation
+10. Training data logged by Gary server (Level 1 users only)
 
 Core Principles Applied:
 - #6: Trust but verify (test each component before integration)
 - #8: Do it well (proper error handling, simple first)
+- #10: Fix root problems, not symptoms
 """
 
 import asyncio

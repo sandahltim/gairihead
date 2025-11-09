@@ -24,8 +24,8 @@ expressions:
       animation: "solid"
       brightness: 200
     eyelids:
-      left: 80  # Wide open
-      right: 80
+      left: 75  # Wide open (max safe angle)
+      right: 75
       blink_rate: 0  # Don't blink while listening
     mouth:
       angle: 15  # Slightly more open
@@ -52,8 +52,8 @@ expressions:
       speed: 500
       brightness: 255
     eyelids:
-      left: 90  # Wide open
-      right: 90
+      left: 75  # Wide open (max safe angle)
+      right: 75
       blink_rate: 0
     mouth:
       angle: 40  # Surprised open
@@ -218,8 +218,8 @@ expressions:
       speed: 600
       brightness: 255
     eyelids:
-      left: 90  # Wide open shock
-      right: 90
+      left: 75  # Wide open shock (max safe angle)
+      right: 75
       blink_rate: 0  # No blink when surprised
     mouth:
       angle: 50  # Wide open

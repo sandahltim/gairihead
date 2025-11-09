@@ -30,10 +30,11 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - **Natural variation** - Blink timing varies ±30% for realism
 - **Time awareness** - Morning grumpy, Thursday planning energy
 
-### 🧠 Two-Tier Intelligence
-- **Local LLM** (Llama 3.2 3B) - Fast, free, 60% of queries
-- **Cloud LLM** (Claude Haiku 4.5) - Complex reasoning, 40% of queries
-- **Cost**: <$10/month vs $50+ all-cloud
+### 🧠 Centralized Intelligence via Gary Server
+- **Architecture**: GairiHead = Hardware Interface → Gary Server = All AI Processing
+- **Gary's Two-Tier System**: Qwen 2.5 (local on Gary) for 60% + Claude Haiku for 40%
+- **GairiHead Role**: Voice I/O, camera, servos, display (pure hardware controller)
+- **Cost**: <$10/month vs $50+ all-cloud (tier selection handled by Gary)
 
 ### 📺 Visual Feedback
 - **Arduino Display** - 2.8" TFT touchscreen with real-time conversation view
@@ -41,11 +42,12 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - **Expression emoji** - Shows current emotional state
 - **Authorization display** - Color-coded security levels (green/yellow/red)
 
-### 📡 Integration
-- **Websocket API** - Remote control from main Gary system
-- **Camera** - Logitech C920 (USB) or Pi Camera Module 3
-- **Face recognition** - Authorization levels with training data
-- **Voice I/O** - Whisper STT, pyttsx3 TTS - **WORKING**
+### 📡 Integration & Intelligence Flow
+- **Websocket API** - All AI processing delegated to Gary server (ws://100.106.44.11:8765)
+- **STT**: Gary's faster-whisper (with local Whisper fallback if Gary unavailable)
+- **LLM**: 100% handled by Gary (Qwen local-tier + Haiku cloud-tier)
+- **Camera** - Face detection/recognition for authorization levels
+- **Voice I/O** - Piper TTS with audio-reactive mouth animation - **WORKING**
 
 ---
 
@@ -182,41 +184,53 @@ See [docs/EXPRESSIONS_GUIDE.md](docs/EXPRESSIONS_GUIDE.md) for complete referenc
 
 ## Architecture
 
-### Software Components
+### Intelligence Flow (Clarified)
 ```
-┌─────────────────────────────────────┐
-│     gairi_head_server.py            │
-│     (Websocket API on port 8766)    │
-└──────────┬──────────────────────────┘
-           │
-     ┌─────┴─────┐
-     │           │
-┌────▼────┐ ┌───▼──────────┐
-│Expression│ │LLM Tier      │
-│Engine    │ │Manager       │
-│(v2.0)    │ │(Local+Cloud) │
-└────┬─────┘ └──────────────┘
-     │
-  ┌──┴───────────┬─────────────┬────────────┐
-  │              │             │            │
-┌─▼───────┐ ┌───▼────┐ ┌──────▼──┐ ┌──────▼──────┐
-│Servo    │ │NeoPixel│ │Vision   │ │Voice (TBD)  │
-│Control  │ │(Pico 2)│ │Handler  │ │             │
-└─────────┘ └────────┘ └─────────┘ └─────────────┘
+GairiHead (Pi 5) - HARDWARE INTERFACE LAYER
+┌────────────────────────────────────────────────┐
+│ ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│ │ Voice I/O│  │  Camera  │  │ Servos/Eyes  │  │
+│ │ (Mic/Spk)│  │(Face Det)│  │ (Expression) │  │
+│ └─────┬────┘  └─────┬────┘  └──────▲───────┘  │
+│       │             │               │          │
+│       └─────────────┴───────────────┘          │
+│                     │                          │
+│            ┌────────▼──────────┐               │
+│            │  LLM Tier Manager │               │
+│            │ (Routes to Gary)  │               │
+│            └────────┬──────────┘               │
+└─────────────────────┼──────────────────────────┘
+                      │ WebSocket
+                      │ ws://gary:8765
+┌─────────────────────▼──────────────────────────┐
+│ Gary Server - ALL INTELLIGENCE PROCESSING      │
+│ ┌──────────────┐  ┌───────────────────────┐   │
+│ │faster-whisper│  │ Two-Tier LLM Routing  │   │
+│ │     STT      │  │ • Qwen (local-tier)   │   │
+│ └──────────────┘  │ • Haiku (cloud-tier)  │   │
+│                   │ • Training collection │   │
+│                   └───────────────────────┘   │
+└────────────────────────────────────────────────┘
 ```
+
+**Key Point**: GairiHead is a thin client - it handles hardware only. ALL AI intelligence (STT, LLM tier selection, training data) happens on Gary server.
 
 ### Integration with Gary
 ```
 ┌──────────────────┐         Websocket         ┌─────────────┐
-│  Main Gary       │◄─────────────────────────►│  GairiHead  │
-│  (Server)        │   ws://100.103.67.41:8766 │  (Pi 5)     │
+│  Gary Server     │◄─────────────────────────►│  GairiHead  │
+│  (Intelligence)  │   ws://100.106.44.11:8765 │  (Hardware) │
 │                  │                            │             │
-│ gairi_head_tool  │                            │ gairi_head_ │
-│     .py          │                            │  server.py  │
+│ • faster-whisper │                            │ • Mic/Spk   │
+│ • Qwen (local)   │                            │ • Camera    │
+│ • Haiku (cloud)  │                            │ • Servos    │
+│ • Training data  │                            │ • Display   │
 └──────────────────┘                            └─────────────┘
 ```
 
 **Communication**: Network-separated, language-agnostic websocket protocol
+
+**Future Capability**: Local Ollama config present for potential future use if hardware improves or offline mode needed.
 
 ---
 

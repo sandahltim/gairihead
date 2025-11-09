@@ -1,49 +1,55 @@
 # GairiHead Architecture
 
-**Two-tier intelligence system: Local monitoring + Cloud reasoning**
+**Thin client hardware interface for Gary's centralized intelligence system**
 
 ---
 
 ## Design Philosophy
 
-**Problem**: Running every "Hey Gary, what time is it?" through Haiku = $$$
-**Solution**: Local LLM for ambient monitoring, escalate to Haiku for business logic
+**Architecture**: GairiHead = Hardware Interface Layer → Gary Server = All Intelligence Processing
 
-**Analogy**: Your brain doesn't fire up the prefrontal cortex to scratch your nose. Same principle.
+**Problem**: Running every "Hey Gary, what time is it?" through Haiku = $$$
+**Solution**: Gary's two-tier LLM system (Qwen local + Haiku cloud), GairiHead just routes queries
+
+**Key Insight**: GairiHead does NO local LLM processing. It's a beautifully engineered hardware controller (voice I/O, camera, servos, display) that delegates ALL AI intelligence to Gary server.
+
+**Analogy**: GairiHead is the body, Gary server is the brain.
 
 ---
 
-## Intelligence Tiers
+## Intelligence Tiers (Gary Server)
 
-### Tier 1: Local LLM (Llama 3.2 3B)
+**IMPORTANT**: Both tiers run on Gary server, NOT on the Pi. GairiHead only sends audio/queries via WebSocket.
 
-**What it handles**:
+### Tier 1: Qwen 2.5 Coder 7B (Gary's Local LLM)
+
+**What it handles** (decided by Gary, not GairiHead):
 - Wake word processing ("Yeah?" "What's up?")
 - Ambient monitoring ("Tim looks frustrated")
 - Simple queries ("What time is it?")
 - Context gathering for escalation
-- Motion/face detection processing
+- Stranger interactions (security: no cloud access for unknowns)
 - Vision analysis ("Tim's at his desk")
 
-**Why local**:
-- Cost: $0 (runs on Pi 5 GPU)
-- Latency: ~300-500ms
-- Privacy: No camera feed to cloud
+**Why local (on Gary)**:
+- Cost: $0 (runs on Gary's GPU)
+- Latency: ~300-500ms (over LAN to Gary)
+- Privacy: No camera feed to external cloud
 - Always-on: No API rate limits
 
 **Example interactions**:
 ```
 Tim: "Hey Gary"
-Local: "Yeah?" [eyes flash blue]
+GairiHead → Gary (Qwen): "Yeah?" [GairiHead eyes flash blue]
 
 Tim: "What time is it?"
-Local: "3:47pm" [simple, no escalation]
+GairiHead → Gary (Qwen): "3:47pm" [simple, no escalation]
 
 Tim: [stares at screen for 10 minutes]
-Local: [Detects frustration] "You okay?" [proactive, no escalation]
+GairiHead camera → Gary (Qwen): [Detects frustration] "You okay?" [proactive, no escalation]
 ```
 
-### Tier 2: Claude Haiku 3.5 (Cloud)
+### Tier 2: Claude Haiku 4.5 (Cloud via Gary)
 
 **What it handles**:
 - Business intelligence queries
@@ -67,37 +73,46 @@ Local: [Detects frustration] "You okay?" [proactive, no escalation]
 **Example interactions**:
 ```
 Tim: "What's Friday's schedule?"
-Local: [Detects business query] → Escalate to Haiku
-Haiku: "Hmmmm... Friday's at 12 deliveries, 3 stores..."
-[Uses operations_schedule_tool, full personality]
+GairiHead → Gary (Qwen): [Detects business query] → Escalate to Haiku
+GairiHead ← Gary (Haiku): "Hmmmm... Friday's at 12 deliveries, 3 stores..."
+[Gary uses operations_schedule_tool, full personality, routes back to GairiHead]
 
 Tim: "Should I pull from Elk River?"
-Local: [Detects complex reasoning] → Escalate to Haiku
-Haiku: "Well... Elk River's at 33 tables available, 20min drive..."
-[Multi-step reasoning, recommendations]
+GairiHead → Gary (Qwen): [Detects complex reasoning] → Escalate to Haiku
+GairiHead ← Gary (Haiku): "Well... Elk River's at 33 tables available, 20min drive..."
+[Multi-step reasoning on Gary, recommendations routed to GairiHead]
 ```
 
 ---
 
-## Escalation Decision Logic
+## Escalation Decision Logic (Gary Server)
+
+**IMPORTANT**: This logic runs on Gary server, NOT on GairiHead. GairiHead just sends the query and receives the response.
 
 ```python
 def should_escalate_to_haiku(query: str, context: dict) -> bool:
     """
-    Decide whether to use local LLM or escalate to Haiku
+    [Runs on Gary Server]
+    Decide whether to use Qwen (local) or escalate to Haiku (cloud)
 
-    Local handles:
+    Qwen handles:
     - Time queries
     - Simple greetings
     - Ambient observations
     - Wake word responses
+    - Stranger interactions (security)
 
     Haiku handles:
     - Business queries (contracts, schedule, inventory)
     - Multi-step reasoning
     - Tool calling requirements
     - Personality-critical responses
+    - Main user (Level 1) complex queries
     """
+
+    # Security: Strangers NEVER get cloud access (handled on Gary)
+    if context.get('authorization', {}).get('level') == 3:
+        return False  # Force Qwen for strangers
 
     # Keywords that trigger escalation
     business_keywords = [
@@ -119,7 +134,7 @@ def should_escalate_to_haiku(query: str, context: dict) -> bool:
     if query.lower().startswith(('how ', 'why ', 'should ')):
         return True
 
-    # Simple queries stay local
+    # Simple queries stay local (Qwen)
     if query.lower().startswith(('what time', 'hey', 'hello')):
         return False
 
@@ -131,62 +146,70 @@ def should_escalate_to_haiku(query: str, context: dict) -> bool:
 
 ## Data Flow
 
-### Wake Word → Response
+### Wake Word → Response (GairiHead Hardware Flow)
 
 ```
-1. USB Mic captures audio
+1. GairiHead USB Mic captures audio
    ↓
-2. Local wake word detection (Porcupine)
+2. GairiHead detects silence (VAD) or button press
    ↓
-3. Eyes flash blue (listening state)
+3. GairiHead eyes flash blue (listening state)
    ↓
-4. Capture full query via STT
+4. GairiHead sends audio to Gary via WebSocket
    ↓
-5. Local LLM analyzes query
+5. Gary Server processes (STT → LLM tier selection)
    ↓
-   ├─ Simple? → Local LLM responds
+   ├─ Simple? → Gary (Qwen) responds
    │            ↓
-   │            Eyes show "talking" state
+   │            GairiHead receives response
    │            ↓
-   │            TTS output + mouth animation
+   │            GairiHead eyes show "talking" state
+   │            ↓
+   │            GairiHead TTS output + mouth animation
    │
-   └─ Complex? → Escalate to Haiku
+   └─ Complex? → Gary escalates to Haiku
                   ↓
-                  Eyes show "thinking" state
-                  ↓
-                  Websocket to main Gary service
+                  GairiHead eyes show "thinking" state (purple)
                   ↓
                   Gary executes tools, returns response
                   ↓
-                  TTS output + mouth animation
+                  GairiHead receives response
+                  ↓
+                  GairiHead TTS output + mouth animation
 ```
 
-### Proactive Monitoring
+**Key**: GairiHead only handles hardware (mic, eyes, servos, speaker). Gary handles ALL intelligence.
+
+### Proactive Monitoring (Future Feature)
 
 ```
-1. Camera continuously monitors (5 FPS)
+1. GairiHead camera continuously monitors (5 FPS)
    ↓
-2. Local LLM analyzes frames
-   - Face detection (OpenCV)
-   - Motion tracking
-   - Posture/attention analysis
+2. GairiHead face detection (OpenCV local)
+   - Face detection (OpenCV on Pi)
+   - Motion tracking (OpenCV on Pi)
+   - Basic frame analysis
    ↓
-3. Detects interesting events:
+3. GairiHead sends frames to Gary for analysis
+   ↓
+4. Gary analyzes with Qwen:
    - Tim walks in
    - Tim looks frustrated
    - Stranger appears
    - Calendar alert time (2pm Thursday)
    ↓
-4. Local LLM decides:
+5. Gary decides response:
    - Ignore (not interesting)
-   - Comment locally ("Morning!")
+   - Comment with Qwen ("Morning!")
    - Escalate to Haiku ("Friday's schedule is chaos...")
    ↓
-5. Trigger proactive speech
-   Eyes → Alert state
-   TTS → Proactive message
-   Mouth → Animated
+6. GairiHead triggers proactive speech
+   Eyes → Alert state (hardware)
+   TTS → Proactive message (hardware)
+   Mouth → Animated (hardware)
 ```
+
+**Key**: Even "local" face detection triggers send frames to Gary for intelligence processing. GairiHead's OpenCV just does basic detection, not analysis.
 
 ---
 
@@ -213,38 +236,41 @@ def should_escalate_to_haiku(query: str, context: dict) -> bool:
 "ERR:invalid"         # Invalid command
 ```
 
-### Pi 5 ↔ Main Gary Service (Websocket)
+### Pi 5 ↔ Gary Server (Websocket) - PRIMARY INTELLIGENCE PATH
 
-**Purpose**: Escalate queries to full Gary intelligence
+**Purpose**: ALL queries go to Gary (transcription, tier selection, LLM processing)
+
+**Endpoint**: `ws://100.106.44.11:8765/ws` (Tailscale)
 
 **Protocol**: JSON over websocket
 ```json
-// GairiHead → Gary Service (query)
+// GairiHead → Gary Server (audio + authorization)
 {
-  "type": "voice_query",
-  "text": "What's Friday's schedule?",
-  "user": "tim",
-  "context": {
-    "vision": "Tim at desk, looking at monitor",
-    "time": "2025-11-06 16:30",
-    "location": "office",
-    "recent_activity": "Reviewing calendar"
+  "audio": "<base64_wav_data>",
+  "source": "gairihead",
+  "process_full_pipeline": true,  // STT + LLM in one call
+  "tier_preference": "auto",      // Gary decides Qwen vs Haiku
+  "authorization": {
+    "level": 1,                   // Face recognition level
+    "user": "tim",
+    "confidence": 0.95
   }
 }
 
-// Gary Service → GairiHead (response)
+// Gary Server → GairiHead (full response)
 {
-  "type": "response",
-  "text": "Hmmmm... Friday's at 12 deliveries...",
+  "transcription": "What's Friday's schedule?",
+  "response": "Hmmmm... Friday's at 12 deliveries...",
+  "tier": "cloud",                // Which tier Gary used
+  "model": "haiku-4.5",
   "expression": "thinking",
   "tool_calls": ["operations_schedule"],
-  "tokens": {
-    "input": 1250,
-    "output": 890,
-    "cost": 0.004
-  }
+  "tokens": 2140,
+  "time_ms": 1850
 }
 ```
+
+**Key**: GairiHead sends raw audio, Gary does EVERYTHING (STT, tier selection, LLM, tools), GairiHead just speaks the response.
 
 ---
 
@@ -299,29 +325,37 @@ class ExpressionEngine:
 
 ---
 
-## Local LLM Integration
+## LLM Integration (Gary Server)
 
-**Model**: Llama 3.2 3B Instruct (quantized to 4-bit)
-**Runtime**: Ollama on Pi 5
-**Memory**: ~2GB VRAM
-**Speed**: ~30 tokens/sec on Pi 5
+**CURRENT SETUP** (Production):
+- **Model**: Qwen 2.5 Coder 7B (local tier on Gary)
+- **Runtime**: Gary server (Tailscale 100.106.44.11:8765)
+- **Memory**: Runs on Gary's GPU (not Pi)
+- **Speed**: ~300-500ms over LAN
+- **GairiHead Role**: Sends audio/text → Receives response
 
-**System Prompt** (stripped down for speed):
+**FUTURE CAPABILITY** (If needed for offline/backup):
+- **Model**: Ollama config present for Llama 3.2 3B
+- **Runtime**: Could run on Pi 5 if Gary unavailable
+- **Status**: Currently unused, kept for potential future use
+- **Use case**: Offline mode, hardware improvements, local experiments
+
+**System Prompt** (runs on Gary, not GairiHead):
 ```
 You are Gary, a former deep-space robot now assisting with office tasks.
 
-You handle simple queries and ambient monitoring.
-For complex business questions, say "LET_ME_THINK" to escalate.
+You handle simple queries and ambient monitoring (Qwen tier).
+For complex business questions, escalate to Haiku tier.
 
-Be brief, witty, helpful. You're monitoring Tim's office.
+Be brief, witty, helpful. You're monitoring Tim's office via GairiHead.
 
 Examples:
-- "What time is it?" → "3:47pm"
-- "Hey Gary" → "Yeah?"
-- "What's Friday's schedule?" → "LET_ME_THINK" (escalate)
+- "What time is it?" → "3:47pm" (Qwen)
+- "Hey Gary" → "Yeah?" (Qwen)
+- "What's Friday's schedule?" → [Escalate to Haiku]
 ```
 
-**Escalation trigger**: Local LLM outputs `LET_ME_THINK` → Pi 5 escalates to Haiku
+**Escalation trigger**: Gary's Qwen detects complexity → Gary escalates to Haiku → Response to GairiHead
 
 ---
 

@@ -1,5 +1,12 @@
 # Gary → GairiHead API Reference
 
+**ARCHITECTURE NOTE**: This document covers Gary's remote control of GairiHead hardware (port 8766).
+For GairiHead → Gary intelligence queries (STT/LLM processing), see `GARY_SERVER_INTEGRATION_2025-11-08.md`.
+
+**Bidirectional Communication**:
+- **GairiHead → Gary (port 8765)**: Send audio for transcription + LLM processing (primary intelligence flow)
+- **Gary → GairiHead (port 8766)**: Remote control hardware (camera, servos, TTS) - this document
+
 ## Setup
 
 **To enable Gary remote control:**

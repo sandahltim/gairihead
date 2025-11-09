@@ -1,11 +1,12 @@
 /*
  * GairiHead TFT Display Controller
  *
- * Arduino Uno + 2.8" TP28017 TFT HAT (240x320)
+ * Arduino Mega + 2.8" TP28017 TFT HAT (240x320)
  * Serial communication with Raspberry Pi 5
  *
  * Features:
  * - 3 display views: Conversation, Status, Debug
+ * - Paginated conversation view (User Q / Gairi Response)
  * - Touch button interface
  * - Expression-to-emoji mapping
  * - Authorization level color coding
@@ -124,6 +125,7 @@ const unsigned int maxBufferSize = 1024;
 // =============================================================================
 
 String expressionToEmoji(String expr) {
+  // Main emotional expressions
   if (expr == "happy") return F(":)");
   if (expr == "amused") return F(":D");
   if (expr == "sarcasm") return F(";)");
@@ -148,7 +150,37 @@ String expressionToEmoji(String expr) {
   if (expr == "surprised") return F("O_O");
   if (expr == "skeptical") return F("-_-");
   if (expr == "bored") return F("-_-");
-  return F("^_^");
+
+  // Additional emotional expressions
+  if (expr == "sleeping") return F("z Z z");
+  if (expr == "speaking") return F("o_o");
+  if (expr == "welcome") return F("^_^");
+  if (expr == "error") return F("X_X");
+  if (expr == "deep_focus") return F("@_@");
+  if (expr == "diagnostic") return F("[?]");
+
+  // Eye animation types (visual indicators)
+  if (expr == "pulse") return F("~");
+  if (expr == "chase") return F(">>>");
+  if (expr == "flash") return F("*");
+  if (expr == "solid") return F("o");
+  if (expr == "smile") return F(":)");
+  if (expr == "side_eye") return F("o.o");
+  if (expr == "narrow") return F("-");
+  if (expr == "alternate_flash") return F("*.*");
+  if (expr == "breathe") return F("~ ~");
+  if (expr == "expand_pulse") return F("O o");
+  if (expr == "spinner") return F("@");
+  if (expr == "rapid_chase") return F(">>>");
+  if (expr == "error_pulse") return F("!!");
+  if (expr == "rainbow") return F("<3");
+  if (expr == "sparkle") return F("***");
+  if (expr == "theater_chase") return F("o-o");
+  if (expr == "comet") return F("-->");
+  if (expr == "alternate_slow") return F(". .");
+  if (expr == "slow_pulse") return F("~ ~");
+
+  return F("^_^");  // Default fallback
 }
 
 // =============================================================================
@@ -248,103 +280,65 @@ bool isTouchInButton(TSPoint p, TouchButton btn) {
 // VIEW: CONVERSATION (PAGINATED)
 // =============================================================================
 
-// Page 0: User Question View
-void drawUserQuestionView() {
+void drawConversationView() {
   tft.fillScreen(COLOR_BG);
 
-  // Title with page indicator
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_USER);
-  tft.setCursor(10, 10);
-  tft.print("User Question");
-
-  // Page indicator
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_AUTH_2);
-  tft.setCursor(SCREEN_WIDTH - 50, 15);
-  tft.print("(1/2)");
-
-  // Expression emoji
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_EXPR);
-  tft.setCursor(SCREEN_WIDTH - 60, 35);
-  tft.print(expressionToEmoji(expression));
-
-  // User text (much more vertical space now!)
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_TEXT);
-  wrapText(userText, 10, 70, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
-
-  // Listening indicator (show if in listening state)
-  if (systemState == "listening") {
-    // Show prominent mic indicator
+  // Page-specific content
+  if (conversationPage == 0) {
+    // User Question Page
     tft.setTextSize(2);
-    tft.setTextColor(COLOR_EXPR);
-    tft.setCursor(10, 200);
-    tft.print("MIC LISTENING...");
+    tft.setTextColor(COLOR_USER);
+    tft.setCursor(10, 10);
+    tft.print(F("User Q"));
 
     tft.setTextSize(1);
     tft.setTextColor(COLOR_AUTH_2);
-    tft.setCursor(10, 225);
-    tft.print("Speak now");
+    tft.setCursor(SCREEN_WIDTH - 50, 15);
+    tft.print(F("(1/2)"));
+
+    wrapText(userText, 10, 50, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+
+    // Listening indicator
+    if (systemState == "listening") {
+      tft.setTextSize(2);
+      tft.setTextColor(COLOR_EXPR);
+      tft.setCursor(10, 190);
+      tft.print(F("MIC ON"));
+    }
+  } else {
+    // Gairi Response Page
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_GAIRI);
+    tft.setCursor(10, 10);
+    tft.print(F("Gairi"));
+
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_AUTH_2);
+    tft.setCursor(SCREEN_WIDTH - 50, 15);
+    tft.print(F("(2/2)"));
+
+    wrapText(gairiText, 10, 50, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+
+    // Footer
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_AUTH_2);
+    tft.setCursor(10, 250);
+    tft.print(tier);
+    tft.print(F(" "));
+    tft.print(responseTime, 1);
+    tft.print(F("s"));
   }
 
-  // Touch buttons
-  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Demo", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
-}
-
-// Page 1: Gairi Response View
-void drawGairiResponseView() {
-  tft.fillScreen(COLOR_BG);
-
-  // Title with page indicator
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_GAIRI);
-  tft.setCursor(10, 10);
-  tft.print("Gairi Response");
-
-  // Page indicator
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_AUTH_2);
-  tft.setCursor(SCREEN_WIDTH - 50, 15);
-  tft.print("(2/2)");
-
-  // Expression emoji
+  // Expression emoji (both pages) - positioned in top right
   tft.setTextSize(2);
   tft.setTextColor(COLOR_EXPR);
   tft.setCursor(SCREEN_WIDTH - 60, 35);
   tft.print(expressionToEmoji(expression));
 
-  // Gairi text (much more vertical space now!)
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_TEXT);
-  wrapText(gairiText, 10, 70, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
-
-  // Footer info
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_AUTH_2);
-  tft.setCursor(10, 250);
-  tft.print("Tier: ");
-  tft.print(tier);
-  tft.print("  Time: ");
-  tft.print(responseTime, 2);
-  tft.print("s");
-
-  // Touch buttons
-  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Demo", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
-}
-
-// Main conversation view dispatcher
-void drawConversationView() {
-  if (conversationPage == 0) {
-    drawUserQuestionView();
-  } else {
-    drawGairiResponseView();
-  }
+  // Touch buttons (both pages)
+  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("OK"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_BUTTON, COLOR_TEXT);
 }
 
 // =============================================================================
@@ -358,7 +352,7 @@ void drawStatusView() {
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TITLE);
   tft.setCursor(10, 10);
-  tft.print("Status");
+  tft.print(F("Status"));
 
   // User info with auth level color
   uint16_t authColor = COLOR_AUTH_3;
@@ -368,57 +362,35 @@ void drawStatusView() {
   tft.setTextSize(2);
   tft.setTextColor(authColor);
   tft.setCursor(10, 50);
-  tft.print("User: ");
   tft.print(userName);
 
   tft.setTextSize(1);
   tft.setCursor(10, 75);
-  tft.print("Auth Level: ");
+  tft.print(F("L"));
   tft.print(authLevel);
 
   // System state
   tft.setTextSize(2);
-  tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(10, 110);
-  tft.print("State:");
-
-  tft.setTextSize(1);
-  tft.setCursor(10, 135);
   tft.setTextColor(COLOR_EXPR);
+  tft.setCursor(10, 110);
   tft.print(systemState);
-  tft.print(" (");
-  tft.print(expression);
-  tft.print(")");
 
-  // Show listening indicator if in listening state
   if (systemState == "listening") {
     tft.setTextSize(2);
     tft.setTextColor(COLOR_EXPR);
     tft.setCursor(150, 110);
-    tft.print("MIC");
+    tft.print(F("MIC"));
   }
-
-  // Confidence
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(10, 170);
-  tft.print("Confidence:");
-
-  tft.setTextSize(1);
-  tft.setCursor(10, 195);
-  int confPercent = (int)(confidence * 100);
-  tft.print(confPercent);
-  tft.print("%");
 
   // Confidence bar
   int barWidth = (int)(200 * confidence);
-  tft.drawRect(10, 210, 200, 20, COLOR_TEXT);
-  tft.fillRect(11, 211, barWidth, 18, authColor);
+  tft.drawRect(10, 170, 200, 20, COLOR_TEXT);
+  tft.fillRect(11, 171, barWidth, 18, authColor);
 
   // Touch buttons
-  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Guest", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("OK"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_BUTTON, COLOR_TEXT);
 }
 
 // =============================================================================
@@ -432,54 +404,39 @@ void drawDebugView() {
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TITLE);
   tft.setCursor(10, 10);
-  tft.print("Debug Info");
+  tft.print(F("Debug"));
 
-  // LLM Tier
+  // Tier
   tft.setTextSize(1);
-  tft.setTextColor(COLOR_TEXT);
   tft.setCursor(10, 50);
-  tft.print("LLM Tier: ");
   tft.setTextColor(tier == "local" ? COLOR_AUTH_1 : COLOR_AUTH_2);
   tft.print(tier);
 
-  // Last tool
+  // Tool
   tft.setTextColor(COLOR_TEXT);
   tft.setCursor(10, 80);
-  tft.print("Last Tool:");
+  tft.print(F("Tool:"));
   tft.setCursor(10, 95);
   tft.setTextColor(COLOR_EXPR);
   tft.print(lastTool);
 
-  // Training status
-  tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(10, 125);
-  tft.print("Training Logged: ");
-  tft.setTextColor(trainingLogged ? COLOR_AUTH_1 : COLOR_AUTH_3);
-  tft.print(trainingLogged ? "YES" : "NO");
-
   // Response time
   tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(10, 155);
-  tft.print("Response Time:");
-  tft.setCursor(10, 170);
+  tft.setCursor(10, 125);
   tft.setTextColor(COLOR_EXPR);
-  tft.print(responseTime, 3);
-  tft.print(" seconds");
+  tft.print(responseTime, 2);
+  tft.print(F("s"));
 
   // Expression
-  tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(10, 200);
-  tft.print("Expression: ");
-  tft.setTextColor(COLOR_EXPR);
-  tft.print(expression);
-  tft.print(" ");
   tft.setTextSize(2);
+  tft.setTextColor(COLOR_EXPR);
+  tft.setCursor(10, 155);
   tft.print(expressionToEmoji(expression));
 
   // Touch buttons
-  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Demo", COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("OK"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_BUTTON, COLOR_TEXT);
 }
 
 // =============================================================================
@@ -503,30 +460,41 @@ void switchView(DisplayView newView) {
 }
 
 void nextView() {
-  switch (currentView) {
-    case VIEW_CONVERSATION:
+  if (currentView == VIEW_CONVERSATION) {
+    if (conversationPage == 0) {
+      // User Q → Gairi Response
+      conversationPage = 1;
+      drawConversationView();
+    } else {
+      // Gairi Response → Status
       switchView(VIEW_STATUS);
-      break;
-    case VIEW_STATUS:
-      switchView(VIEW_DEBUG);
-      break;
-    case VIEW_DEBUG:
-      switchView(VIEW_CONVERSATION);
-      break;
+    }
+  } else if (currentView == VIEW_STATUS) {
+    switchView(VIEW_DEBUG);
+  } else {
+    // Debug → User Q
+    conversationPage = 0;
+    switchView(VIEW_CONVERSATION);
   }
 }
 
 void previousView() {
-  switch (currentView) {
-    case VIEW_CONVERSATION:
+  if (currentView == VIEW_CONVERSATION) {
+    if (conversationPage == 1) {
+      // Gairi Response → User Q
+      conversationPage = 0;
+      drawConversationView();
+    } else {
+      // User Q → Debug
       switchView(VIEW_DEBUG);
-      break;
-    case VIEW_STATUS:
-      switchView(VIEW_CONVERSATION);
-      break;
-    case VIEW_DEBUG:
-      switchView(VIEW_STATUS);
-      break;
+    }
+  } else if (currentView == VIEW_STATUS) {
+    // Status → Gairi Response
+    conversationPage = 1;
+    switchView(VIEW_CONVERSATION);
+  } else {
+    // Debug → Status
+    switchView(VIEW_STATUS);
   }
 }
 
@@ -535,7 +503,7 @@ void previousView() {
 // =============================================================================
 
 void handleJsonMessage(String json) {
-  StaticJsonDocument<1024> doc;
+  StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
@@ -572,8 +540,7 @@ void handleJsonMessage(String json) {
     if (currentView == VIEW_STATUS) {
       drawStatusView();
     } else if (currentView == VIEW_CONVERSATION && conversationPage == 0) {
-      // Redraw user question view to show listening indicator
-      drawUserQuestionView();
+      drawConversationView();
     }
 
     Serial.println(F("{\"ok\":1}"));
@@ -621,26 +588,10 @@ void handleTouch() {
   // Check which button was pressed
   if (isTouchInButton(p, btnLeft)) {
     Serial.println(F("{\"touch\":\"left\"}"));
-
-    // If in conversation view, cycle conversation pages
-    if (currentView == VIEW_CONVERSATION) {
-      conversationPage = (conversationPage == 0) ? 1 : 0;
-      drawConversationView();
-    } else {
-      previousView();
-    }
-
+    previousView();
   } else if (isTouchInButton(p, btnRight)) {
     Serial.println(F("{\"touch\":\"right\"}"));
-
-    // If in conversation view, cycle conversation pages
-    if (currentView == VIEW_CONVERSATION) {
-      conversationPage = (conversationPage == 0) ? 1 : 0;
-      drawConversationView();
-    } else {
-      nextView();
-    }
-
+    nextView();
   } else if (isTouchInButton(p, btnCenter)) {
     Serial.println(F("{\"touch\":\"center\"}"));
     // Reserved for future actions (voice trigger)

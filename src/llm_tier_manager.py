@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-LLM Tier Manager - Two-tier intelligence for cost optimization
+LLM Tier Manager - Routes queries to Gary server for centralized intelligence
 
-Version: 2.1 (2025-11-07) - Added training data collection
-Tier 1: Local LLM (Qwen 2.5 Coder 7B on Gary's server) - Free, ~60% of queries
-Tier 2: Cloud LLM (Claude Haiku 4.5) - Paid, ~40% of queries
+ARCHITECTURE (Clarified):
+- GairiHead = Hardware Interface (THIS CODE)
+- Gary Server = ALL Intelligence Processing (Qwen + Haiku tiers)
+- This module sends audio/queries to Gary, receives responses
 
-Decision logic:
-- Simple queries, greetings, status → Local (Qwen on Gary's server)
-- Complex reasoning, tool calling, business logic → Cloud (Haiku)
-- Confidence-based escalation
-- Authorization-aware: Strangers get local only, main users get full access
+Version: 2.1 (2025-11-07) - Training data collection on Gary server
+Gary's Tier 1: Qwen 2.5 Coder 7B (on Gary's GPU) - Free, ~60% of queries
+Gary's Tier 2: Claude Haiku 4.5 (via Gary) - Paid, ~40% of queries
 
-Training Data Collection (v2.1):
-- Logs all main user (Level 1) conversations for fine-tuning
-- Captures Qwen responses and Haiku escalations
-- Security: NEVER logs stranger (Level 3) interactions
+Decision logic (runs on Gary server, not here):
+- Simple queries, greetings, status → Qwen (Gary's local tier)
+- Complex reasoning, tool calling, business logic → Haiku (Gary's cloud tier)
+- Confidence-based escalation (Gary decides)
+- Authorization-aware: Strangers get Qwen only, main users get full access
+
+Training Data Collection (v2.1 - happens on Gary):
+- Gary logs all main user (Level 1) conversations for fine-tuning
+- Gary captures Qwen responses and Haiku escalations
+- Security: Gary NEVER logs stranger (Level 3) interactions
+
+Future Capability:
+- Ollama config present for potential offline/backup mode
+- Currently unused - all intelligence delegated to Gary
 """
 
 import requests

@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """
-Voice Handler - Speech-to-Text and Text-to-Speech integration for GairiHead
+Voice Handler - Hardware voice I/O for GairiHead (routes intelligence to Gary)
+
+ARCHITECTURE (Clarified):
+- GairiHead = Hardware Interface (THIS CODE - mic, speaker, audio processing)
+- Gary Server = ALL Intelligence (STT via faster-whisper, LLM tiers)
+- This module: Capture audio → Send to Gary → Receive response → Speak
 
 Version: 1.0 (2025-11-07)
-Purpose: Complete voice interaction pipeline for GairiHead physical robot
+Purpose: Complete voice I/O pipeline for GairiHead physical robot
 
 Components:
-- Speech-to-Text: Whisper (OpenAI)
-- Text-to-Speech: pyttsx3 + espeak-ng (local, free)
-- Audio Recording: sounddevice (C920 built-in microphone)
+- Audio Capture: sounddevice (C920 microphone) + VAD-based silence detection
+- Speech-to-Text: Gary's faster-whisper (primary), local Whisper fallback
+- LLM Processing: Gary's Qwen/Haiku tiers (via LLMTierManager routing)
+- Text-to-Speech: Piper neural TTS "joe" voice (local, audio-reactive mouth)
 
 Flow:
-1. Record audio from microphone
-2. Transcribe with Whisper
-3. Send to Gary via LLMTierManager
-4. Speak response with pyttsx3
+1. Record audio from microphone (VAD-based stop detection)
+2. Send audio to Gary server via WebSocket
+3. Gary transcribes (faster-whisper) + processes (Qwen/Haiku tiers)
+4. Receive response from Gary
+5. Speak response with Piper TTS + animate mouth
 
 Core Principles Applied:
 - #6: Trust but verify (test each component before integration)

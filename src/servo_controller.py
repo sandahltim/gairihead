@@ -142,8 +142,8 @@ class ServoController:
         """Fully close servos and release GPIO pins (allows other processes to access)"""
         try:
             # Cancel any pending detach timers
-            if hasattr(self, 'detach_timer') and self.detach_timer:
-                self.detach_timer.cancel()
+            if hasattr(self, '_detach_timer') and self._detach_timer:
+                self._detach_timer.cancel()
 
             # Close all servos (releases GPIO pins)
             if hasattr(self, 'left_eyelid') and self.left_eyelid:
