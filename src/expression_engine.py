@@ -174,12 +174,25 @@ class ExpressionEngine:
 
         # Servos
         if self.servo_controller:
-            if 'left_eyelid' in expr:
+            # Handle eyelids (nested structure in YAML)
+            if 'eyelids' in expr:
+                if 'left' in expr['eyelids']:
+                    self.servo_controller.set_left_eyelid(expr['eyelids']['left'])
+                if 'right' in expr['eyelids']:
+                    self.servo_controller.set_right_eyelid(expr['eyelids']['right'])
+            # Fallback for direct left_eyelid/right_eyelid (old format)
+            elif 'left_eyelid' in expr:
                 self.servo_controller.set_left_eyelid(expr['left_eyelid'])
-            if 'right_eyelid' in expr:
-                self.servo_controller.set_right_eyelid(expr['right_eyelid'])
+                self.servo_controller.set_right_eyelid(expr.get('right_eyelid', expr['left_eyelid']))
+
+            # Handle mouth (nested structure in YAML)
             if 'mouth' in expr:
-                self.servo_controller.set_mouth(expr['mouth'])
+                if isinstance(expr['mouth'], dict):
+                    # New format: mouth has 'angle' key
+                    self.servo_controller.set_mouth(expr['mouth'].get('angle', 0))
+                else:
+                    # Old format: mouth is direct number
+                    self.servo_controller.set_mouth(expr['mouth'])
 
         # NeoPixels
         if self.neopixel_controller and 'eyes' in expr:
