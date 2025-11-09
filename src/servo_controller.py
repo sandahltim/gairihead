@@ -206,12 +206,12 @@ class ServoController:
         """
         CALIBRATED mapping for right eyelid (MG90S servo on GPIO 27)
 
-        Uses INVERTED left eye calibration for symmetric movement
-        - Left eye: 0.100 (closed) to -0.310 (open)
-        - Right eye: -0.100 (closed) to 0.310 (open) [MIRRORED]
-        - Working range: 0.410 span (SAME as left eye)
+        Physical calibration data from right_eye_calibration.txt:
+        - 0° (closed tight) → servo -0.200
+        - 75° (fully open)  → servo 0.500
+        - Working range: 0.700 span
 
-        Note: Right eye servo is mechanically identical but mounted opposite
+        Note: Right eye servo is mechanically mounted opposite from left
         """
         # Clamp to physical range
         angle = max(0, min(75, angle))
@@ -219,8 +219,8 @@ class ServoController:
         # Normalize to 0-1 (0° = 0, 75° = 1)
         normalized = angle / 75.0
 
-        # Inverted left eye formula: -(0.100 - (normalized * 0.410))
-        servo_value = -0.100 + (normalized * 0.410)
+        # Map to calibrated servo range: -0.200 to 0.500
+        servo_value = -0.200 + (normalized * 0.700)
 
         return servo_value
 
