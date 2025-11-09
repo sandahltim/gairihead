@@ -183,6 +183,9 @@ class GairiHeadServer:
             elif action == 'speak':
                 return await self._handle_speak(params)
 
+            elif action == 'blink':
+                return await self._handle_blink(params)
+
             else:
                 return {
                     'status': 'error',
@@ -518,6 +521,54 @@ class GairiHeadServer:
             return {
                 'status': 'error',
                 'error': f'Failed to speak: {e}'
+            }
+
+    async def _handle_blink(self, params: Dict) -> Dict:
+        """Make GairiHead blink with optional repeat count"""
+        count = params.get('count', 1)  # Number of blinks, default 1
+        duration = params.get('duration', None)  # Blink duration, None for natural
+        natural_variation = params.get('natural_variation', True)
+
+        logger.info(f"Blinking (Gary remote): {count} time{'s' if count > 1 else ''}")
+
+        try:
+            # Acquire hardware lock (remote = high priority)
+            from hardware_coordinator import get_coordinator
+            coordinator = get_coordinator()
+
+            if not coordinator.acquire(timeout=5.0, is_remote=True):
+                return {
+                    'status': 'error',
+                    'error': 'Hardware busy - could not acquire lock'
+                }
+
+            try:
+                servos = self._get_servos()
+
+                # Perform blinks
+                for i in range(count):
+                    servos.blink(duration=duration, natural_variation=natural_variation)
+                    # Small pause between blinks if multiple
+                    if count > 1 and i < count - 1:
+                        await asyncio.sleep(0.3)
+
+                return {
+                    'status': 'success',
+                    'data': {
+                        'blinks': count,
+                        'timestamp': time.time()
+                    }
+                }
+
+            finally:
+                # Always release hardware lock
+                coordinator.release()
+
+        except Exception as e:
+            logger.error(f"Failed to blink: {e}")
+            return {
+                'status': 'error',
+                'error': f'Failed to blink: {e}'
             }
 
     async def handle_client(self, websocket):
