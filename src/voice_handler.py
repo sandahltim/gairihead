@@ -422,7 +422,7 @@ class VoiceHandler:
                             rms = np.sqrt(np.mean(outdata**2))
 
                             # Apply non-linear scaling for more natural look
-                            scaled_amplitude = np.sqrt(rms) * sensitivity * 2.5  # 2.5x boost for visibility
+                            scaled_amplitude = np.sqrt(rms) * sensitivity * 4.0  # 4.0x boost for more visible mouth opening
 
                             # Exponential moving average for smoothing (reduces jitter)
                             # alpha = 0.3 means 30% new value, 70% previous (smooth but responsive)
