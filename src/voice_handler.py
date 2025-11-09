@@ -393,7 +393,7 @@ class VoiceHandler:
 
                         # Setup for audio-reactive animation
                         sample_rate = self.piper_voice.config.sample_rate
-                        blocksize = int(sample_rate * 0.03)  # 30ms chunks for responsive animation
+                        blocksize = int(sample_rate * 0.05)  # 50ms chunks (slower = less jitter)
                         neutral = servo_controller.mouth_config['neutral_angle']
                         max_angle = mouth_animation_params['max_angle']
                         sensitivity = mouth_animation_params['sensitivity']
@@ -409,29 +409,40 @@ class VoiceHandler:
                         servo_controller.left_eyelid.detach()
                         servo_controller.right_eyelid.detach()
 
+                        # Smoothing state (mutable list so callback can modify)
+                        smoothed_amplitude = [0.0]  # Exponential moving average
+
                         # Audio-reactive callback: called for each audio chunk during playback
                         def audio_callback(outdata, frames, time_info, status):
                             """
                             Real-time audio callback - moves mouth based on actual audio amplitude
-                            This achieves PERFECT sync because mouth responds directly to sound volume
+                            With exponential smoothing to reduce jitter
                             """
                             # Calculate RMS amplitude of this audio chunk
                             rms = np.sqrt(np.mean(outdata**2))
 
-                            # Map RMS (0-1) to mouth position (neutral to max_open)
-                            # Apply non-linear scaling for more natural look (sqrt makes quiet sounds more visible)
-                            scaled_amplitude = np.sqrt(rms) * sensitivity * 2.0  # 2.0x boost for visibility
-                            scaled_amplitude = min(1.0, scaled_amplitude)  # Clamp to 0-1
+                            # Apply non-linear scaling for more natural look
+                            scaled_amplitude = np.sqrt(rms) * sensitivity * 2.5  # 2.5x boost for visibility
 
-                            mouth_pos = neutral + int(mouth_range * scaled_amplitude)
+                            # Exponential moving average for smoothing (reduces jitter)
+                            # alpha = 0.3 means 30% new value, 70% previous (smooth but responsive)
+                            alpha = 0.3
+                            smoothed_amplitude[0] = alpha * scaled_amplitude + (1 - alpha) * smoothed_amplitude[0]
+
+                            # Clamp to 0-1
+                            smoothed = min(1.0, max(0.0, smoothed_amplitude[0]))
+
+                            # Only update if change is significant (avoid micro-jitters)
+                            mouth_pos = neutral + int(mouth_range * smoothed)
                             mouth_pos = max(neutral, min(max_angle, mouth_pos))
 
-                            # Update mouth position (direct servo update, no smoothing for real-time response)
-                            try:
-                                servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(mouth_pos)
-                                servo_controller.current_mouth = mouth_pos
-                            except:
-                                pass  # Ignore errors in callback (don't crash audio playback)
+                            # Update mouth position only if changed by at least 1 degree
+                            if abs(mouth_pos - servo_controller.current_mouth) >= 1:
+                                try:
+                                    servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(mouth_pos)
+                                    servo_controller.current_mouth = mouth_pos
+                                except:
+                                    pass  # Ignore errors in callback (don't crash audio playback)
 
                         # Play audio with real-time mouth animation callback
                         sd.play(audio_float * self.tts_volume, samplerate=sample_rate, blocksize=blocksize, callback=audio_callback)
