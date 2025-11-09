@@ -206,11 +206,12 @@ class ServoController:
         """
         CALIBRATED mapping for right eyelid (MG90S servo on GPIO 27)
 
-        Uses SAME mapping as left eye (servos mounted identically)
-        - Right eye: 0.100 (closed) to -0.310 (open) [SAME AS LEFT]
-        - Working range: 0.410 span
+        Uses INVERTED left eye calibration for symmetric movement
+        - Left eye: 0.100 (closed) to -0.310 (open)
+        - Right eye: -0.100 (closed) to 0.310 (open) [MIRRORED]
+        - Working range: 0.410 span (SAME as left eye)
 
-        Note: Right eye servo mounted same orientation as left eye
+        Note: Right eye servo is mechanically identical but mounted opposite
         """
         # Clamp to physical range
         angle = max(0, min(75, angle))
@@ -218,8 +219,8 @@ class ServoController:
         # Normalize to 0-1 (0° = 0, 75° = 1)
         normalized = angle / 75.0
 
-        # Same as left eye formula
-        servo_value = 0.100 - (normalized * 0.410)
+        # Inverted left eye formula: -(0.100 - (normalized * 0.410))
+        servo_value = -0.100 + (normalized * 0.410)
 
         return servo_value
 
@@ -465,27 +466,43 @@ class ServoController:
         """
         # Add natural variation to blink speed
         if duration is None:
-            base_duration = 0.12
+            base_duration = 0.15
             if natural_variation:
                 duration = base_duration * (1 + random.uniform(-self.blink_variation,
                                                                self.blink_variation))
             else:
                 duration = base_duration
 
-        # Store current positions
+        # Store current positions to return to
         left_current = self.current_left
         right_current = self.current_right
 
-        # Close (fast)
-        self.set_left_eyelid(0, smooth=True, duration=duration * 0.4)
-        self.set_right_eyelid(0, smooth=True, duration=duration * 0.4)
+        # FULL RANGE BLINK (uses entire calibrated 0-75° range for dramatic effect)
 
-        # Brief pause
-        time.sleep(duration * 0.2)
+        # 1. Open eyes FULLY (75° - wide open)
+        self.set_left_eyelid(75, smooth=True, duration=duration * 0.2)
+        self.set_right_eyelid(75, smooth=True, duration=duration * 0.2)
 
-        # Open (slightly slower for natural look)
-        self.set_left_eyelid(left_current, smooth=True, duration=duration * 0.6)
-        self.set_right_eyelid(right_current, smooth=True, duration=duration * 0.6)
+        # Brief pause at full open
+        time.sleep(duration * 0.1)
+
+        # 2. Close FULLY (0° - tight close, fast)
+        self.set_left_eyelid(0, smooth=True, duration=duration * 0.3)
+        self.set_right_eyelid(0, smooth=True, duration=duration * 0.3)
+
+        # Brief pause at closed
+        time.sleep(duration * 0.1)
+
+        # 3. Open back to FULL (75° - slightly slower for natural look)
+        self.set_left_eyelid(75, smooth=True, duration=duration * 0.4)
+        self.set_right_eyelid(75, smooth=True, duration=duration * 0.4)
+
+        # Brief pause before returning to original
+        time.sleep(duration * 0.1)
+
+        # 4. Return to original position
+        self.set_left_eyelid(left_current, smooth=True, duration=duration * 0.3)
+        self.set_right_eyelid(right_current, smooth=True, duration=duration * 0.3)
 
     def wink(self, eye='left', duration=0.25):
         """
