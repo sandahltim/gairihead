@@ -702,6 +702,7 @@ class ServoController:
         mouth_range = (max_open - neutral) * base_amplitude
 
         frame = 0
+        logger.info(f"💬 Animation loop started (range: {neutral}° to {max_open}°, amplitude: {base_amplitude})")
         while self.speech_animation_active:
             # Create natural talking motion using FAST sine waves that match speech cadence
             # Much higher frequencies for realistic speech animation (8-12 Hz typical speech)
@@ -718,12 +719,18 @@ class ServoController:
             mouth_pos = neutral + (mouth_range * combined)
             mouth_pos = int(max(neutral, min(max_open, mouth_pos)))  # Clamp and convert to int
 
+            # Debug every 10th frame
+            if frame % 10 == 0:
+                logger.debug(f"Animation frame {frame}: pos={mouth_pos}°, combined={combined:.2f}")
+
             # Set mouth position (fast, no smoothing for responsive animation)
             with self.movement_lock:
                 self.set_mouth(mouth_pos, smooth=False)
 
             frame += 1
             time.sleep(0.033)  # ~30 FPS for smoother, more responsive animation
+
+        logger.info(f"💬 Animation loop stopped (total frames: {frame})")
 
     def cleanup(self):
         """Clean up GPIO resources"""

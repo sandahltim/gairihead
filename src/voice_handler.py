@@ -383,20 +383,66 @@ class VoiceHandler:
                     for chunk in self.piper_voice.synthesize(text):
                         audio_bytes.extend(chunk.audio_int16_bytes)
 
-                    # Play audio directly with sounddevice
+                    # Play audio directly with sounddevice WITH AUDIO-REACTIVE MOUTH MOVEMENT
                     audio_array = np.frombuffer(bytes(audio_bytes), dtype=np.int16)
                     audio_float = audio_array.astype(np.float32) / 32767.0
 
-                    # Start mouth animation right before audio playback
+                    # Audio-reactive mouth movement: analyze amplitude in real-time
                     if servo_controller and mouth_animation_params:
-                        logger.info(f"🗣️ Starting mouth animation (sensitivity={mouth_animation_params['sensitivity']}, max_angle={mouth_animation_params['max_angle']})")
-                        servo_controller.start_speech_animation(
-                            base_amplitude=mouth_animation_params['sensitivity'],
-                            max_angle_override=mouth_animation_params['max_angle']
-                        )
+                        logger.info(f"🗣️ Starting AUDIO-REACTIVE mouth animation (sensitivity={mouth_animation_params['sensitivity']}, max_angle={mouth_animation_params['max_angle']})")
 
-                    sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
-                    sd.wait()
+                        # Setup for audio-reactive animation
+                        sample_rate = self.piper_voice.config.sample_rate
+                        blocksize = int(sample_rate * 0.03)  # 30ms chunks for responsive animation
+                        neutral = servo_controller.mouth_config['neutral_angle']
+                        max_angle = mouth_animation_params['max_angle']
+                        sensitivity = mouth_animation_params['sensitivity']
+                        mouth_range = (max_angle - neutral) * sensitivity
+
+                        # Cancel pending detach timers
+                        if servo_controller._detach_timer:
+                            servo_controller._detach_timer.cancel()
+
+                        # Attach mouth servo, detach eyes
+                        servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(neutral)
+                        servo_controller.current_mouth = neutral
+                        servo_controller.left_eyelid.detach()
+                        servo_controller.right_eyelid.detach()
+
+                        # Audio-reactive callback: called for each audio chunk during playback
+                        def audio_callback(outdata, frames, time_info, status):
+                            """
+                            Real-time audio callback - moves mouth based on actual audio amplitude
+                            This achieves PERFECT sync because mouth responds directly to sound volume
+                            """
+                            # Calculate RMS amplitude of this audio chunk
+                            rms = np.sqrt(np.mean(outdata**2))
+
+                            # Map RMS (0-1) to mouth position (neutral to max_open)
+                            # Apply non-linear scaling for more natural look (sqrt makes quiet sounds more visible)
+                            scaled_amplitude = np.sqrt(rms) * sensitivity * 2.0  # 2.0x boost for visibility
+                            scaled_amplitude = min(1.0, scaled_amplitude)  # Clamp to 0-1
+
+                            mouth_pos = neutral + int(mouth_range * scaled_amplitude)
+                            mouth_pos = max(neutral, min(max_angle, mouth_pos))
+
+                            # Update mouth position (direct servo update, no smoothing for real-time response)
+                            try:
+                                servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(mouth_pos)
+                                servo_controller.current_mouth = mouth_pos
+                            except:
+                                pass  # Ignore errors in callback (don't crash audio playback)
+
+                        # Play audio with real-time mouth animation callback
+                        sd.play(audio_float * self.tts_volume, samplerate=sample_rate, blocksize=blocksize, callback=audio_callback)
+                        sd.wait()
+
+                        # Return mouth to neutral after speech
+                        servo_controller.set_mouth(neutral, smooth=True, duration=0.2)
+                    else:
+                        # No servo controller - just play audio
+                        sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
+                        sd.wait()
                 else:
                     # Use pyttsx3
                     # Start mouth animation right before pyttsx3 playback
@@ -409,10 +455,13 @@ class VoiceHandler:
 
                     self.tts_engine.say(text)
                     self.tts_engine.runAndWait()
+
+                    # Return mouth to neutral after pyttsx3 speech
+                    if servo_controller:
+                        servo_controller.set_mouth(servo_controller.mouth_config['neutral_angle'], smooth=True, duration=0.2)
             finally:
-                # Stop mouth animation
-                if servo_controller:
-                    servo_controller.stop_speech_animation()
+                # Ensure servos detach after idle period
+                pass  # Detach handled by idle timer in servo_controller
 
             speak_time = int((time.time() - start_time) * 1000)
             self.stats['tts_successes'] += 1
