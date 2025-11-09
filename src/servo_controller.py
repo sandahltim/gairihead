@@ -458,7 +458,7 @@ class ServoController:
 
     def blink(self, duration=None, natural_variation=True):
         """
-        Perform a blink with natural variation
+        Perform a blink with natural variation - BOTH EYES MOVE SIMULTANEOUSLY
 
         Args:
             duration: Blink duration (None for auto with variation)
@@ -477,16 +477,55 @@ class ServoController:
         left_current = self.current_left
         right_current = self.current_right
 
-        # Close (fast)
-        self.set_left_eyelid(0, smooth=True, duration=duration * 0.4)
-        self.set_right_eyelid(0, smooth=True, duration=duration * 0.4)
+        # Re-attach servos for movement
+        self._attach_servos()
+
+        # CLOSE PHASE (fast) - BOTH EYES SIMULTANEOUSLY
+        close_duration = duration * 0.4
+        steps = 10
+        step_delay = close_duration / steps
+
+        for i in range(steps + 1):
+            progress = i / steps
+            eased = self.ease_in_out_cubic(progress)
+
+            # Move BOTH eyes at the same time
+            left_angle = left_current + (0 - left_current) * eased
+            right_angle = right_current + (0 - right_current) * eased
+
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(left_angle)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(right_angle)
+
+            if i < steps:
+                time.sleep(step_delay)
+
+        self.current_left = 0
+        self.current_right = 0
 
         # Brief pause
         time.sleep(duration * 0.2)
 
-        # Open (slightly slower for natural look)
-        self.set_left_eyelid(left_current, smooth=True, duration=duration * 0.6)
-        self.set_right_eyelid(right_current, smooth=True, duration=duration * 0.6)
+        # OPEN PHASE (slower) - BOTH EYES SIMULTANEOUSLY
+        open_duration = duration * 0.6
+        steps = 12
+        step_delay = open_duration / steps
+
+        for i in range(steps + 1):
+            progress = i / steps
+            eased = self.ease_in_out_cubic(progress)
+
+            # Move BOTH eyes at the same time
+            left_angle = 0 + (left_current - 0) * eased
+            right_angle = 0 + (right_current - 0) * eased
+
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(left_angle)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(right_angle)
+
+            if i < steps:
+                time.sleep(step_delay)
+
+        self.current_left = left_current
+        self.current_right = right_current
 
     def wink(self, eye='left', duration=0.25):
         """
