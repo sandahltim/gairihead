@@ -186,6 +186,9 @@ class GairiHeadServer:
             elif action == 'blink':
                 return await self._handle_blink(params)
 
+            elif action == 'test_sync':
+                return await self._handle_test_sync(params)
+
             else:
                 return {
                     'status': 'error',
@@ -569,6 +572,46 @@ class GairiHeadServer:
             return {
                 'status': 'error',
                 'error': f'Failed to blink: {e}'
+            }
+
+    async def _handle_test_sync(self, params: Dict) -> Dict:
+        """Test synchronized eye movement: full open → pause → full closed → pause → full open"""
+        logger.info("Running sync test: full open → close → open with 2s pauses")
+
+        try:
+            # Acquire hardware lock (remote = high priority)
+            from hardware_coordinator import get_coordinator
+            coordinator = get_coordinator()
+
+            if not coordinator.acquire(timeout=5.0, is_remote=True):
+                return {
+                    'status': 'error',
+                    'error': 'Hardware busy - could not acquire lock'
+                }
+
+            try:
+                servos = self._get_servos()
+
+                # Run the test sequence
+                servos.test_sync_movement()
+
+                return {
+                    'status': 'success',
+                    'data': {
+                        'test': 'sync_movement_complete',
+                        'timestamp': time.time()
+                    }
+                }
+
+            finally:
+                # Always release hardware lock
+                coordinator.release()
+
+        except Exception as e:
+            logger.error(f"Failed to run sync test: {e}")
+            return {
+                'status': 'error',
+                'error': f'Failed to run sync test: {e}'
             }
 
     async def handle_client(self, websocket):

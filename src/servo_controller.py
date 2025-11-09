@@ -527,6 +527,91 @@ class ServoController:
         self.current_left = left_current
         self.current_right = right_current
 
+    def test_sync_movement(self):
+        """
+        Test synchronized movement: full open → pause → full closed → pause → full open
+        Both eyes move together with 2-second pauses to verify synchronization
+        """
+        logger.info("Starting sync test: full open → close → open with 2s pauses")
+
+        # Re-attach servos for movement
+        self._attach_servos()
+
+        # PHASE 1: Move to FULL OPEN (75°) - smooth movement
+        logger.debug("Phase 1: Moving to full open (75°)")
+        steps = 20
+        step_delay = 0.5 / steps  # 0.5s to reach position
+
+        for i in range(steps + 1):
+            progress = i / steps
+            eased = self.ease_in_out_cubic(progress)
+
+            # Both eyes to 75° simultaneously
+            left_angle = self.current_left + (75 - self.current_left) * eased
+            right_angle = self.current_right + (75 - self.current_right) * eased
+
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(left_angle)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(right_angle)
+
+            if i < steps:
+                time.sleep(step_delay)
+
+        self.current_left = 75
+        self.current_right = 75
+        logger.success("✅ Both eyes FULL OPEN (75°)")
+
+        # PAUSE 2 seconds
+        time.sleep(2.0)
+
+        # PHASE 2: Move to FULL CLOSED (0°) - smooth movement
+        logger.debug("Phase 2: Moving to full closed (0°)")
+        steps = 20
+        step_delay = 0.5 / steps
+
+        for i in range(steps + 1):
+            progress = i / steps
+            eased = self.ease_in_out_cubic(progress)
+
+            # Both eyes to 0° simultaneously
+            left_angle = 75 + (0 - 75) * eased
+            right_angle = 75 + (0 - 75) * eased
+
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(left_angle)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(right_angle)
+
+            if i < steps:
+                time.sleep(step_delay)
+
+        self.current_left = 0
+        self.current_right = 0
+        logger.success("✅ Both eyes FULL CLOSED (0°)")
+
+        # PAUSE 2 seconds
+        time.sleep(2.0)
+
+        # PHASE 3: Move back to FULL OPEN (75°) - smooth movement
+        logger.debug("Phase 3: Moving back to full open (75°)")
+        steps = 20
+        step_delay = 0.5 / steps
+
+        for i in range(steps + 1):
+            progress = i / steps
+            eased = self.ease_in_out_cubic(progress)
+
+            # Both eyes to 75° simultaneously
+            left_angle = 0 + (75 - 0) * eased
+            right_angle = 0 + (75 - 0) * eased
+
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(left_angle)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(right_angle)
+
+            if i < steps:
+                time.sleep(step_delay)
+
+        self.current_left = 75
+        self.current_right = 75
+        logger.success("✅ Both eyes FULL OPEN (75°) - Test complete!")
+
     def wink(self, eye='left', duration=0.25):
         """
         Wink one eye (perfect for sarcasm delivery!)
