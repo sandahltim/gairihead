@@ -305,18 +305,37 @@ class GairiHeadServer:
         """Get GairiHead current status"""
         logger.info("Getting status...")
 
+        # Try to initialize hardware to check availability
+        camera_available = False
+        servos_available = False
+
+        try:
+            cam = self._get_camera()
+            camera_available = True
+        except:
+            pass
+
+        try:
+            servos = self._get_servos()
+            servos_available = True
+        except:
+            pass
+
         status = {
             'expression': self.current_expression,
-            'camera_available': self.camera_manager is not None,
-            'servos_available': self.servo_controller is not None,
+            'camera_available': camera_available,
+            'servos_available': servos_available,
             'uptime': time.time(),  # Would need to track start time
             'timestamp': time.time()
         }
 
         # If camera is initialized, get info
         if self.camera_manager:
-            cam_info = self.camera_manager.get_info()
-            status['camera'] = cam_info
+            try:
+                cam_info = self.camera_manager.get_info()
+                status['camera'] = cam_info
+            except:
+                pass
 
         return {
             'status': 'success',
