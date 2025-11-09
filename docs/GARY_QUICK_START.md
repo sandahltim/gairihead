@@ -142,12 +142,20 @@ python3 scripts/test_server_commands.py
 ## Implementation Details
 
 **What just got added (2025-11-08):**
-1. Complete `speak` action with TTS + mouth animation
-2. Hardware coordinator for priority management
-3. Arduino display integration for remote commands
-4. Camera lazy initialization
-5. Servo jitter reduction
+1. Complete `speak` action with TTS + mouth animation ✅
+2. Hardware coordinator for priority management ✅
+3. Arduino display integration for remote commands ✅
+4. Camera lazy initialization ✅
+5. Servo jitter reduction ✅
+6. **Lazy servo initialization for GPIO sharing** ✅ (CRITICAL FIX)
+   - Main app releases GPIO pins when idle
+   - Server can access servos between local interactions
+   - No more "GPIO busy" errors
+   - Automatic coordination between processes
 
-**Commit:** `fa4d7fb` - feat: Add Gary remote control API with hardware coordination
+**Commits:**
+- `fa4d7fb` - feat: Add Gary remote control API with hardware coordination
+- `972c560` - fix: Ensure hardware lock always released in main app
+- `d189c50` - feat: Lazy servo initialization for GPIO sharing between processes
 
 **Full docs:** `/home/tim/GairiHead/docs/GARY_API_REFERENCE.md`
