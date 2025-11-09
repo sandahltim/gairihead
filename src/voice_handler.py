@@ -362,29 +362,19 @@ class VoiceHandler:
             logger.info(f"🔊 Speaking: \"{text[:50]}{'...' if len(text) > 50 else ''}\"")
             start_time = time.time()
 
-            # Start mouth animation if servo controller available
-            # Use calibrated values from speaking expression
+            # Get servo controller for mouth animation (start later, after TTS synthesis)
             servo_controller = None
-            logger.debug(f"Checking for mouth animation: expression_engine={self.expression_engine is not None}")
+            mouth_animation_params = None
             if self.expression_engine and hasattr(self.expression_engine, 'servo_controller'):
                 servo_controller = self.expression_engine.servo_controller
-                logger.debug(f"Expression engine has servo_controller: {servo_controller is not None}")
                 if servo_controller:
                     # Get sensitivity from speaking expression (default 0.7)
                     speaking_expr = self.expression_engine.expressions.get('speaking', {})
                     mouth_config = speaking_expr.get('mouth', {})
-                    sensitivity = mouth_config.get('sensitivity', 0.7)
-                    max_angle = mouth_config.get('max_angle', 50)
-
-                    logger.info(f"🗣️ Starting mouth animation (sensitivity={sensitivity}, max_angle={max_angle})")
-                    servo_controller.start_speech_animation(
-                        base_amplitude=sensitivity,
-                        max_angle_override=max_angle
-                    )
-                else:
-                    logger.warning("Servo controller is None - no mouth animation")
-            else:
-                logger.warning(f"No expression engine or servo_controller attribute - no mouth animation")
+                    mouth_animation_params = {
+                        'sensitivity': mouth_config.get('sensitivity', 0.7),
+                        'max_angle': mouth_config.get('max_angle', 50)
+                    }
 
             try:
                 if self.tts_engine == 'piper' and self.piper_voice:
@@ -397,10 +387,26 @@ class VoiceHandler:
                     audio_array = np.frombuffer(bytes(audio_bytes), dtype=np.int16)
                     audio_float = audio_array.astype(np.float32) / 32767.0
 
+                    # Start mouth animation right before audio playback
+                    if servo_controller and mouth_animation_params:
+                        logger.info(f"🗣️ Starting mouth animation (sensitivity={mouth_animation_params['sensitivity']}, max_angle={mouth_animation_params['max_angle']})")
+                        servo_controller.start_speech_animation(
+                            base_amplitude=mouth_animation_params['sensitivity'],
+                            max_angle_override=mouth_animation_params['max_angle']
+                        )
+
                     sd.play(audio_float * self.tts_volume, samplerate=self.piper_voice.config.sample_rate)
                     sd.wait()
                 else:
                     # Use pyttsx3
+                    # Start mouth animation right before pyttsx3 playback
+                    if servo_controller and mouth_animation_params:
+                        logger.info(f"🗣️ Starting mouth animation (sensitivity={mouth_animation_params['sensitivity']}, max_angle={mouth_animation_params['max_angle']})")
+                        servo_controller.start_speech_animation(
+                            base_amplitude=mouth_animation_params['sensitivity'],
+                            max_angle_override=mouth_animation_params['max_angle']
+                        )
+
                     self.tts_engine.say(text)
                     self.tts_engine.runAndWait()
             finally:

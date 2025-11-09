@@ -698,30 +698,32 @@ class ServoController:
         # Use override from speaking expression if provided, otherwise use servo max
         max_open = max_angle_override if max_angle_override is not None else self.mouth_config['max_angle']
 
-        # Calculate movement range based on calibrated values
-        mouth_range = int((max_open - neutral) * base_amplitude)
+        # Calculate movement range based on calibrated values (use full range, no int truncation)
+        mouth_range = (max_open - neutral) * base_amplitude
 
         frame = 0
         while self.speech_animation_active:
-            # Create natural talking motion using sine wave with variation
-            # Use multiple frequencies for more natural movement
-            primary_wave = math.sin(frame * 0.5)  # Primary talking motion
-            secondary_wave = math.sin(frame * 0.3) * 0.3  # Secondary variation
-            noise = random.uniform(-0.1, 0.1)  # Small random variation
+            # Create natural talking motion using FAST sine waves that match speech cadence
+            # Much higher frequencies for realistic speech animation (8-12 Hz typical speech)
+            primary_wave = math.sin(frame * 1.2)  # ~6 Hz at 30 FPS - fast talking motion
+            secondary_wave = math.sin(frame * 0.8) * 0.3  # ~4 Hz variation
+            noise = random.uniform(-0.15, 0.15)  # More variation for natural look
 
-            # Combine waves
-            combined = (primary_wave + secondary_wave + noise) * 0.5 + 0.5  # Normalize to 0-1
+            # Combine waves - use FULL 0-1 range (not * 0.5!)
+            combined = (primary_wave + secondary_wave + noise)  # -1 to 1 range
+            combined = (combined + 1.0) / 2.0  # Normalize to 0-1 (using full range)
+            combined = max(0.0, min(1.0, combined))  # Clamp
 
-            # Calculate mouth position
-            mouth_pos = neutral + int(mouth_range * combined)
-            mouth_pos = max(neutral, min(max_open, mouth_pos))  # Clamp
+            # Calculate mouth position (keep as float for smooth movement)
+            mouth_pos = neutral + (mouth_range * combined)
+            mouth_pos = int(max(neutral, min(max_open, mouth_pos)))  # Clamp and convert to int
 
             # Set mouth position (fast, no smoothing for responsive animation)
             with self.movement_lock:
                 self.set_mouth(mouth_pos, smooth=False)
 
             frame += 1
-            time.sleep(0.05)  # 20 FPS animation
+            time.sleep(0.033)  # ~30 FPS for smoother, more responsive animation
 
     def cleanup(self):
         """Clean up GPIO resources"""
