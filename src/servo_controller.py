@@ -24,8 +24,12 @@ from pathlib import Path
 class ServoController:
     """Manages servo positions for eyelids and mouth"""
 
-    def __init__(self, config_path="/Gary/GairiHead/config/gairi_head.yaml"):
+    def __init__(self, config_path=None):
         """Initialize servos with config"""
+        if config_path is None:
+            # Auto-detect config path relative to this file
+            config_path = Path(__file__).parent.parent / 'config' / 'gairi_head.yaml'
+
         self.config = self._load_config(config_path)
 
         # Use lgpio for Pi 5 (native GPIO library)
@@ -40,10 +44,12 @@ class ServoController:
         # Initialize servos
         servo_config = self.config['hardware']['servos']
 
+        # Use higher frame width for more stable PWM (reduces jitter)
         self.left_eyelid = Servo(
             servo_config['left_eyelid']['gpio_pin'],
             min_pulse_width=0.5/1000,
             max_pulse_width=2.5/1000,
+            frame_width=20/1000,  # 20ms = 50Hz (standard servo frequency)
             pin_factory=factory
         )
 
@@ -51,6 +57,7 @@ class ServoController:
             servo_config['right_eyelid']['gpio_pin'],
             min_pulse_width=0.5/1000,
             max_pulse_width=2.5/1000,
+            frame_width=20/1000,
             pin_factory=factory
         )
 
@@ -58,6 +65,7 @@ class ServoController:
             servo_config['mouth']['gpio_pin'],
             min_pulse_width=0.5/1000,
             max_pulse_width=2.5/1000,
+            frame_width=20/1000,
             pin_factory=factory
         )
 
@@ -83,10 +91,16 @@ class ServoController:
         self.speech_animation_active = False
         self._speech_animation_thread = None
 
+        # Jitter reduction: detach servos when idle
+        self.idle_detach_enabled = True
+        self.last_movement_time = time.time()
+        self.detach_delay = 2.0  # Seconds of no movement before detaching
+        self._detach_timer = None
+
         # Set to neutral
         self.reset_to_neutral()
 
-        logger.info("Servo controller initialized (v2.0 - smooth movement)")
+        logger.info("Servo controller initialized (v2.0 - smooth movement, jitter reduction enabled)")
 
     def _load_config(self, config_path):
         """Load configuration file"""
@@ -99,6 +113,41 @@ class ServoController:
         self.set_right_eyelid(self.right_config['neutral_angle'])
         self.set_mouth(self.mouth_config['neutral_angle'])
         logger.info("Servos reset to neutral")
+
+    def _schedule_detach(self):
+        """Schedule servo detach after idle period to reduce jitter"""
+        if not self.idle_detach_enabled:
+            return
+
+        # Cancel existing timer
+        if self._detach_timer:
+            self._detach_timer.cancel()
+
+        # Schedule new detach
+        self._detach_timer = threading.Timer(self.detach_delay, self._detach_servos)
+        self._detach_timer.daemon = True
+        self._detach_timer.start()
+
+    def _detach_servos(self):
+        """Detach servos to stop PWM and eliminate jitter when idle"""
+        try:
+            self.left_eyelid.detach()
+            self.right_eyelid.detach()
+            self.mouth.detach()
+            logger.debug("Servos detached (idle - no jitter)")
+        except Exception as e:
+            logger.debug(f"Servo detach failed: {e}")
+
+    def _attach_servos(self):
+        """Re-attach servos before movement"""
+        try:
+            # Set servos to current known positions
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(self.current_left)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(self.current_right)
+            self.mouth.value = self.angle_to_servo_value_mouth(self.current_mouth)
+            logger.debug("Servos re-attached for movement")
+        except Exception as e:
+            logger.debug(f"Servo attach failed: {e}")
 
     def angle_to_servo_value(self, angle, min_angle, max_angle):
         """
@@ -281,6 +330,9 @@ class ServoController:
         angle = max(0, min(75, angle))
 
         with self.movement_lock:
+            # Re-attach servos before movement (jitter reduction)
+            self._attach_servos()
+
             if smooth:
                 # Use CALIBRATED mapping
                 current_value = self.angle_to_servo_value_left_eye(self.current_left)
@@ -295,6 +347,9 @@ class ServoController:
                 self.left_eyelid.value = value
 
             self.current_left = angle
+
+            # Schedule detach after idle period (jitter reduction)
+            self._schedule_detach()
 
     def set_right_eyelid(self, angle, smooth=True, duration=0.25):
         """
@@ -316,6 +371,9 @@ class ServoController:
             time.sleep(self.lazy_eye_delay)
 
         with self.movement_lock:
+            # Re-attach servos before movement (jitter reduction)
+            self._attach_servos()
+
             if smooth:
                 # Use CALIBRATED mapping
                 current_value = self.angle_to_servo_value_right_eye(self.current_right)
@@ -330,6 +388,9 @@ class ServoController:
                 self.right_eyelid.value = value
 
             self.current_right = angle
+
+            # Schedule detach after idle period (jitter reduction)
+            self._schedule_detach()
 
     def set_mouth(self, angle, smooth=True, duration=0.2):
         """
@@ -347,6 +408,9 @@ class ServoController:
         angle = max(0, min(60, angle))
 
         with self.movement_lock:
+            # Re-attach servos before movement (jitter reduction)
+            self._attach_servos()
+
             if smooth:
                 # Use CALIBRATED mapping
                 current_value = self.angle_to_servo_value_mouth(self.current_mouth)
@@ -361,6 +425,9 @@ class ServoController:
                 self.mouth.value = value
 
             self.current_mouth = angle
+
+            # Schedule detach after idle period (jitter reduction)
+            self._schedule_detach()
 
     # =========================================================================
     # PERSONALITY METHODS - TARS Character

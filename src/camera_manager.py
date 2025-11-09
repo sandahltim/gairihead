@@ -21,13 +21,14 @@ import subprocess
 class CameraManager:
     """Manages camera access with USB/CSI compatibility"""
 
-    def __init__(self, config_path=None, prefer_picam=False):
+    def __init__(self, config_path=None, prefer_picam=False, lazy_init=False):
         """
         Initialize camera with auto-detection
 
         Args:
             config_path: Path to gairi_head.yaml (defaults to ../config/gairi_head.yaml)
             prefer_picam: If True, try Pi Camera first, else try USB first
+            lazy_init: If True, don't open camera until first use (saves power, allows sharing)
         """
         if config_path is None:
             # Default to config relative to this file
@@ -38,19 +39,32 @@ class CameraManager:
         self.camera = None
         self.camera_type = None
         self.is_opened = False
+        self.prefer_picam = prefer_picam
+        self.lazy_init = lazy_init
 
         # Get resolution and FPS from config
         self.width, self.height = self.camera_config['camera_resolution']
         self.fps = self.camera_config['camera_fps']
 
-        # Try to initialize camera
-        if prefer_picam:
-            self._try_picamera() or self._try_usb_camera()
-        else:
-            self._try_usb_camera() or self._try_picamera()
+        # Initialize immediately unless lazy init is enabled
+        if not lazy_init:
+            self._open_camera()
 
-        if not self.is_opened:
+    def _open_camera(self):
+        """Open camera device"""
+        if self.is_opened:
+            return True
+
+        # Try to initialize camera
+        if self.prefer_picam:
+            success = self._try_picamera() or self._try_usb_camera()
+        else:
+            success = self._try_usb_camera() or self._try_picamera()
+
+        if not success:
             raise RuntimeError("No camera found! Tried USB and Pi Camera Module.")
+
+        return success
 
     def _load_config(self, config_path):
         """Load configuration file"""
@@ -152,8 +166,13 @@ class CameraManager:
             (success: bool, frame: np.ndarray or None)
             Frame is always BGR format for OpenCV compatibility
         """
+        # Lazy initialization - open camera on first use
         if not self.is_opened:
-            return False, None
+            try:
+                self._open_camera()
+            except Exception as e:
+                logger.error(f"Failed to open camera: {e}")
+                return False, None
 
         try:
             if self.camera_type == "USB":
@@ -171,6 +190,45 @@ class CameraManager:
         except Exception as e:
             logger.error(f"Failed to read frame: {e}")
             return False, None
+
+    def close(self):
+        """Close camera to free resources and allow other processes to use it"""
+        if not self.is_opened:
+            return
+
+        try:
+            if self.camera_type == "USB":
+                self.camera.release()
+            elif self.camera_type == "PiCamera":
+                self.camera.close()
+
+            self.is_opened = False
+            self.camera = None
+            logger.debug(f"{self.camera_type} camera closed")
+        except Exception as e:
+            logger.warning(f"Error closing camera: {e}")
+
+    def is_available(self) -> bool:
+        """Check if camera device exists (without locking it)"""
+        # Check for USB camera
+        for i in range(3):  # Check /dev/video0-2
+            if Path(f"/dev/video{i}").exists():
+                return True
+
+        # Check for Pi Camera
+        try:
+            result = subprocess.run(
+                ['vcgencmd', 'get_camera'],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if 'detected=1' in result.stdout:
+                return True
+        except:
+            pass
+
+        return False
 
     def get_info(self) -> dict:
         """Get camera information"""

@@ -83,11 +83,11 @@ class GairiHeadAssistant:
         
         # 1. Camera Manager
         try:
-            logger.info("1. Initializing camera...")
-            # CameraManager expects config_path, not config dict
-            # Camera auto-initializes in __init__
-            self.camera = CameraManager(config_path=None)
-            logger.success("✅ Camera initialized")
+            logger.info("1. Initializing camera (lazy mode - opens on first use)...")
+            # Lazy init - camera opens on first use, closes after to save power
+            # This allows server to use camera when main app is idle
+            self.camera = CameraManager(config_path=None, lazy_init=True)
+            logger.success("✅ Camera initialized (lazy mode)")
         except Exception as e:
             logger.error(f"❌ Camera initialization failed: {e}")
             self.camera = None
@@ -184,7 +184,7 @@ class GairiHeadAssistant:
     def get_authorization(self) -> dict:
         """
         Determine authorization level through face recognition
-        
+
         Returns:
             Authorization dict with level, user, confidence
         """
@@ -196,9 +196,9 @@ class GairiHeadAssistant:
                 'user': 'unknown',
                 'confidence': 0.0
             }
-        
+
         try:
-            # Capture frame
+            # Capture frame (camera opens on first read)
             success, frame = self.camera.read_frame()
             if not success or frame is None:
                 logger.warning("Failed to capture frame - defaulting to stranger mode")
@@ -227,19 +227,19 @@ class GairiHeadAssistant:
 
             if result['recognized']:
                 logger.info(f"🎯 Recognized: {result['name']} (confidence: {result['confidence']:.2f})")
-                
+
                 # Map name to authorization level
                 # Level 1: Main users (Tim)
                 # Level 2: Guests (registered but limited access)
                 # Level 3: Strangers (unknown faces)
-                
+
                 if result['name'].lower() == 'tim':
                     level = 1
                 elif result['name'].lower() in ['guest1', 'guest2']:  # Example guest names
                     level = 2
                 else:
                     level = 3
-                
+
                 return {
                     'level': level,
                     'user': result['name'],
@@ -252,7 +252,7 @@ class GairiHeadAssistant:
                     'user': 'unknown',
                     'confidence': 0.0
                 }
-        
+
         except Exception as e:
             logger.error(f"Face recognition error: {e}")
             return {
@@ -260,6 +260,11 @@ class GairiHeadAssistant:
                 'user': 'unknown',
                 'confidence': 0.0
             }
+
+        finally:
+            # Close camera after face detection to save power and allow server access
+            if self.camera:
+                self.camera.close()
     
     async def handle_interaction(self):
         """Handle a single voice interaction with proper UX flow"""
@@ -272,6 +277,24 @@ class GairiHeadAssistant:
         time_since_last = time.time() - self.last_interaction_time
         if time_since_last < self.interaction_cooldown:
             logger.debug(f"Cooldown active ({time_since_last:.1f}s < {self.interaction_cooldown}s), ignoring trigger")
+            return
+
+        # Check if Gary is using hardware remotely
+        from src.hardware_coordinator import get_coordinator
+        coordinator = get_coordinator()
+
+        # Try to acquire lock (local = normal priority, short timeout)
+        if not coordinator.acquire(timeout=0.5, is_remote=False):
+            logger.info("⏸️  Gary is using GairiHead remotely - local interaction blocked")
+            # Show message on display if available
+            if self.arduino_display and self.arduino_display.connected:
+                self.arduino_display.show_conversation(
+                    user_text="",
+                    gairi_text="Gary is using me remotely...",
+                    expression="idle",
+                    tier="gary",
+                    response_time=0.0
+                )
             return
 
         # Mark as in interaction
@@ -355,6 +378,9 @@ class GairiHeadAssistant:
                 self.expression_engine.set_expression('idle')
             except:
                 pass
+
+        # Release hardware lock
+        coordinator.release()
 
         # Mark interaction complete and update timestamp
         self.in_interaction = False

@@ -6,8 +6,10 @@ Commands from main Gary:
 - capture_snapshot: Return base64 encoded camera frame
 - record_audio: Record N seconds of audio, return base64 WAV
 - analyze_scene: Capture frame + describe what's happening
-- get_status: Return GairiHead status (camera, mic, expression)
-- set_expression: Change facial expression
+- detect_faces: Fast face detection without full image
+- get_status: Return GairiHead status (camera, servos, expression)
+- set_expression: Change facial expression (servos)
+- speak: Make GairiHead speak text with mouth animation and optional expression
 """
 
 import asyncio
@@ -59,6 +61,8 @@ class GairiHeadServer:
         self.camera_manager = None
         self.servo_controller = None
         self.arduino_display = None
+        self.voice_handler = None
+        self.expression_engine = None
 
         # Status
         self.is_running = False
@@ -77,9 +81,16 @@ class GairiHeadServer:
     def _get_servos(self):
         """Lazy init servo controller"""
         if self.servo_controller is None:
-            from servo_controller import ServoController
-            self.servo_controller = ServoController()
-            logger.info("Servo controller initialized")
+            try:
+                from servo_controller import ServoController
+                self.servo_controller = ServoController()
+                logger.info("Servo controller initialized")
+            except Exception as e:
+                if "GPIO busy" in str(e) or "busy" in str(e).lower():
+                    logger.warning("Servos in use by main app (GPIO busy)")
+                    raise RuntimeError("Servos currently in use by main app")
+                else:
+                    raise
         return self.servo_controller
 
     def _get_arduino_display(self):
@@ -102,6 +113,37 @@ class GairiHeadServer:
                 from arduino_display import ArduinoDisplay
                 self.arduino_display = ArduinoDisplay(enabled=False)
         return self.arduino_display
+
+    def _get_voice_handler(self):
+        """Lazy init voice handler"""
+        if self.voice_handler is None:
+            from voice_handler import VoiceHandler
+            self.voice_handler = VoiceHandler(self.config)
+            logger.info("Voice handler initialized")
+        return self.voice_handler
+
+    def _get_expression_engine(self):
+        """Lazy init expression engine"""
+        if self.expression_engine is None:
+            from expression_engine import ExpressionEngine
+            from pathlib import Path
+
+            # ExpressionEngine expects config directory path
+            config_dir = Path(__file__).parent.parent / 'config'
+
+            # Create expression engine
+            self.expression_engine = ExpressionEngine(config_path=str(config_dir))
+
+            # Attach servo controller and display
+            servos = self._get_servos()
+            display = self._get_arduino_display()
+            self.expression_engine.set_controllers(
+                servo_controller=servos,
+                arduino_display=display
+            )
+
+            logger.info("Expression engine initialized")
+        return self.expression_engine
 
     async def handle_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -137,6 +179,9 @@ class GairiHeadServer:
 
             elif action == 'detect_faces':
                 return await self._handle_detect_faces(params)
+
+            elif action == 'speak':
+                return await self._handle_speak(params)
 
             else:
                 return {
@@ -305,31 +350,30 @@ class GairiHeadServer:
         """Get GairiHead current status"""
         logger.info("Getting status...")
 
-        # Try to initialize hardware to check availability
-        camera_available = False
-        servos_available = False
+        # Check hardware availability without locking devices
+        # (main app may have them open)
+        import os
 
-        try:
-            cam = self._get_camera()
-            camera_available = True
-        except:
-            pass
+        # Check camera: Look for video devices
+        camera_available = (
+            os.path.exists('/dev/video0') or
+            os.path.exists('/dev/video1') or
+            os.path.exists('/dev/video2')
+        )
 
-        try:
-            servos = self._get_servos()
-            servos_available = True
-        except:
-            pass
+        # Check servos: Verify GPIO access
+        servos_available = os.path.exists('/dev/gpiomem') or os.path.exists('/dev/gpiochip0')
 
         status = {
             'expression': self.current_expression,
             'camera_available': camera_available,
             'servos_available': servos_available,
-            'uptime': time.time(),  # Would need to track start time
-            'timestamp': time.time()
+            'server_uptime': time.time(),
+            'timestamp': time.time(),
+            'note': 'Hardware may be in use by main app'
         }
 
-        # If camera is initialized, get info
+        # If camera is already initialized by server, get info
         if self.camera_manager:
             try:
                 cam_info = self.camera_manager.get_info()
@@ -345,35 +389,135 @@ class GairiHeadServer:
     async def _handle_set_expression(self, params: Dict) -> Dict:
         """Set facial expression"""
         expression = params.get('expression', 'idle')
-        logger.info(f"Setting expression: {expression}")
+        logger.info(f"Setting expression (Gary remote): {expression}")
 
         try:
-            servos = self._get_servos()
-            servos.set_expression(expression)
-            self.current_expression = expression
+            # Acquire hardware lock (remote = high priority)
+            from hardware_coordinator import get_coordinator
+            coordinator = get_coordinator()
 
-            # Update Arduino display with new expression
-            display = self._get_arduino_display()
-            if display and display.connected:
-                display.update_status(
-                    user=params.get('user', 'unknown'),
-                    level=params.get('level', 3),
-                    state=params.get('state', 'idle'),
-                    confidence=params.get('confidence', 0.0),
-                    expression=expression
-                )
-
-            return {
-                'status': 'success',
-                'data': {
-                    'expression': expression,
-                    'timestamp': time.time()
+            if not coordinator.acquire(timeout=5.0, is_remote=True):
+                return {
+                    'status': 'error',
+                    'error': 'Hardware busy - could not acquire lock'
                 }
-            }
+
+            try:
+                servos = self._get_servos()
+                servos.set_expression(expression)
+                self.current_expression = expression
+
+                # Update Arduino display with new expression
+                display = self._get_arduino_display()
+                if display and display.connected:
+                    display.update_status(
+                        user=params.get('user', 'Gary'),
+                        level=params.get('level', 1),
+                        state=params.get('state', 'idle'),
+                        confidence=params.get('confidence', 1.0),
+                        expression=expression
+                    )
+
+                return {
+                    'status': 'success',
+                    'data': {
+                        'expression': expression,
+                        'timestamp': time.time()
+                    }
+                }
+
+            finally:
+                # Always release hardware lock
+                coordinator.release()
+
         except Exception as e:
             return {
                 'status': 'error',
                 'error': f'Failed to set expression: {e}'
+            }
+
+    async def _handle_speak(self, params: Dict) -> Dict:
+        """Make GairiHead speak text with optional expression and mouth animation"""
+        text = params.get('text', '')
+        expression = params.get('expression', None)  # Optional expression during speech
+        animate_mouth = params.get('animate_mouth', True)  # Default to animating mouth
+
+        if not text:
+            return {
+                'status': 'error',
+                'error': 'No text provided to speak'
+            }
+
+        logger.info(f"Speaking (Gary remote): {text[:50]}{'...' if len(text) > 50 else ''}")
+
+        try:
+            # Acquire hardware lock (remote = high priority)
+            from hardware_coordinator import get_coordinator
+            coordinator = get_coordinator()
+
+            if not coordinator.acquire(timeout=10.0, is_remote=True):
+                return {
+                    'status': 'error',
+                    'error': 'Hardware busy - could not acquire lock'
+                }
+
+            try:
+                # Get voice handler and expression engine
+                voice = self._get_voice_handler()
+                expr_engine = self._get_expression_engine()
+
+                # Set expression if provided
+                if expression:
+                    servos = self._get_servos()
+                    servos.set_expression(expression)
+                    self.current_expression = expression
+
+                # Update Arduino display with "speaking" state
+                display = self._get_arduino_display()
+                if display and display.connected:
+                    # Show what Gary is saying on the display
+                    display.show_conversation(
+                        user_text="",  # No user query in remote mode
+                        gairi_text=text,
+                        expression=expression or self.current_expression,
+                        tier="gary",  # Show it's from Gary
+                        response_time=0.0
+                    )
+
+                # Speak with mouth animation
+                # Voice handler automatically animates mouth if expression_engine is set
+                voice.expression_engine = expr_engine
+                voice.speak(text)
+
+                # Return display to idle state after speaking
+                if display and display.connected:
+                    display.update_status(
+                        user="ready",
+                        level=3,
+                        state="idle",
+                        confidence=0.0,
+                        expression=self.current_expression
+                    )
+
+                return {
+                    'status': 'success',
+                    'data': {
+                        'text': text,
+                        'expression': expression or self.current_expression,
+                        'animated_mouth': animate_mouth,
+                        'timestamp': time.time()
+                    }
+                }
+
+            finally:
+                # Always release hardware lock
+                coordinator.release()
+
+        except Exception as e:
+            logger.error(f"Failed to speak: {e}")
+            return {
+                'status': 'error',
+                'error': f'Failed to speak: {e}'
             }
 
     async def handle_client(self, websocket):
