@@ -444,9 +444,38 @@ class VoiceHandler:
                                 except:
                                     pass  # Ignore errors in callback (don't crash audio playback)
 
-                        # Play audio with real-time mouth animation callback
-                        sd.play(audio_float * self.tts_volume, samplerate=sample_rate, blocksize=blocksize, callback=audio_callback)
-                        sd.wait()
+                        # Play audio with real-time mouth animation using OutputStream
+                        audio_data = audio_float * self.tts_volume
+                        frame_index = [0]  # Mutable counter for callback
+
+                        def stream_callback(outdata, frames, time_info, status):
+                            """Stream callback that plays audio AND animates mouth"""
+                            start_idx = frame_index[0]
+                            end_idx = start_idx + frames
+
+                            if end_idx > len(audio_data):
+                                # End of audio - pad with zeros
+                                remaining = len(audio_data) - start_idx
+                                if remaining > 0:
+                                    outdata[:remaining, 0] = audio_data[start_idx:]
+                                    outdata[remaining:, 0] = 0
+                                else:
+                                    outdata[:, 0] = 0
+                                frame_index[0] = len(audio_data)
+                            else:
+                                # Normal playback
+                                outdata[:, 0] = audio_data[start_idx:end_idx]
+                                frame_index[0] = end_idx
+
+                            # Call audio-reactive mouth animation
+                            audio_callback(outdata, frames, time_info, status)
+
+                        # Play audio with mouth animation
+                        with sd.OutputStream(samplerate=sample_rate, blocksize=blocksize,
+                                           channels=1, callback=stream_callback):
+                            # Wait for all audio to play
+                            while frame_index[0] < len(audio_data):
+                                sd.sleep(100)  # Sleep 100ms between checks
 
                         # Return mouth to neutral after speech
                         servo_controller.set_mouth(neutral, smooth=True, duration=0.2)
