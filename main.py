@@ -134,26 +134,17 @@ class GairiHeadAssistant:
             logger.error(f"❌ Arduino display initialization failed: {e}")
             self.arduino_display = None
 
-        # 4.5. Expression Engine + Servo Controller (OPTIONAL)
+        # 4.5. Expression Engine (OPTIONAL - Servos initialized lazily on first use)
         try:
             logger.info("4.5. Initializing expression engine...")
             # ExpressionEngine expects directory path, not file path
             config_dir = self.config_path.parent
             self.expression_engine = ExpressionEngine(config_path=str(config_dir))
 
-            # Initialize servo controller and attach to expression engine
-            logger.info("     Initializing servo controller...")
-            try:
-                self.servo_controller = ServoController(config_path=str(self.config_path))
-                self.expression_engine.set_controllers(
-                    servo_controller=self.servo_controller,
-                    arduino_display=self.arduino_display
-                )
-                logger.success("✅ Expression engine + servos initialized")
-            except Exception as servo_error:
-                logger.warning(f"⚠️ Servo controller init failed: {servo_error}")
-                logger.info("   Expression engine will work without servo hardware")
-                self.servo_controller = None
+            # Servos NOT initialized at startup - lazy init on first interaction
+            # This allows server process to access GPIO when not in use
+            self.servo_controller = None
+            logger.success("✅ Expression engine initialized (servos lazy-loaded)")
         except Exception as e:
             logger.warning(f"⚠️ Expression engine initialization failed: {e}")
             logger.info("   Continuing without servo expressions (software will still work)")
@@ -306,6 +297,21 @@ class GairiHeadAssistant:
             logger.info(f"Interaction #{self.interaction_count}")
             logger.info(f"{'=' * 60}")
 
+            # Initialize servos if not already done (lazy init)
+            if self.servo_controller is None and self.expression_engine:
+                try:
+                    logger.debug("Lazy-initializing servos for local interaction...")
+                    from src.servo_controller import ServoController
+                    self.servo_controller = ServoController(config_path=str(self.config_path))
+                    self.expression_engine.set_controllers(
+                        servo_controller=self.servo_controller,
+                        arduino_display=self.arduino_display
+                    )
+                    logger.debug("Servos initialized successfully")
+                except Exception as servo_error:
+                    logger.warning(f"Servo init failed (continuing without servos): {servo_error}")
+                    self.servo_controller = None
+
             # Step 1: Visual scan for authorization (HAPPENS ON BUTTON PRESS)
             logger.info("👁️  Step 1: Scanning for face authorization...")
 
@@ -381,6 +387,15 @@ class GairiHeadAssistant:
                     pass
 
         finally:
+            # Close servos to release GPIO pins for server access
+            if self.servo_controller:
+                try:
+                    self.servo_controller.close()
+                    self.servo_controller = None
+                    logger.debug("Servos closed (GPIO released for server)")
+                except Exception as e:
+                    logger.debug(f"Servo close failed: {e}")
+
             # ALWAYS release hardware lock (even if exception occurs)
             coordinator.release()
 

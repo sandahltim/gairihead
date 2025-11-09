@@ -138,6 +138,25 @@ class ServoController:
         except Exception as e:
             logger.debug(f"Servo detach failed: {e}")
 
+    def close(self):
+        """Fully close servos and release GPIO pins (allows other processes to access)"""
+        try:
+            # Cancel any pending detach timers
+            if hasattr(self, 'detach_timer') and self.detach_timer:
+                self.detach_timer.cancel()
+
+            # Close all servos (releases GPIO pins)
+            if hasattr(self, 'left_eyelid') and self.left_eyelid:
+                self.left_eyelid.close()
+            if hasattr(self, 'right_eyelid') and self.right_eyelid:
+                self.right_eyelid.close()
+            if hasattr(self, 'mouth') and self.mouth:
+                self.mouth.close()
+
+            logger.debug("Servos closed (GPIO pins released)")
+        except Exception as e:
+            logger.warning(f"Servo close failed: {e}")
+
     def _attach_servos(self):
         """Re-attach servos before movement"""
         try:
