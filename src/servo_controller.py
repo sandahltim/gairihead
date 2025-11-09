@@ -428,7 +428,9 @@ class ServoController:
 
         with self.movement_lock:
             # Re-attach servos before movement (jitter reduction)
-            self._attach_servos()
+            # BUT during speech animation, mouth is already attached and eyes should stay detached
+            if not self.speech_animation_active:
+                self._attach_servos()
 
             if smooth:
                 # Use CALIBRATED mapping
@@ -634,6 +636,22 @@ class ServoController:
         if self.speech_animation_active:
             logger.debug("Speech animation already active")
             return
+
+        # Cancel any pending detach timer (from previous set_expression, etc.)
+        # We don't want the mouth detaching during speech!
+        if self._detach_timer:
+            self._detach_timer.cancel()
+            logger.debug("Cancelled pending detach timer before speech animation")
+
+        # Ensure mouth servo is attached (might be detached from previous operation)
+        # Set to neutral position using .value (which attaches the servo)
+        try:
+            neutral_angle = self.mouth_config['neutral_angle']
+            self.mouth.value = self.angle_to_servo_value_mouth(neutral_angle)
+            self.current_mouth = neutral_angle
+            logger.debug(f"Mouth servo attached and set to neutral ({neutral_angle}°)")
+        except Exception as e:
+            logger.error(f"Failed to attach mouth servo for speech animation: {e}")
 
         # Detach eye servos to prevent jitter during speech
         # This also allows eye expressions to be changed independently
