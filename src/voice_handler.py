@@ -365,8 +365,10 @@ class VoiceHandler:
             # Start mouth animation if servo controller available
             # Use calibrated values from speaking expression
             servo_controller = None
+            logger.debug(f"Checking for mouth animation: expression_engine={self.expression_engine is not None}")
             if self.expression_engine and hasattr(self.expression_engine, 'servo_controller'):
                 servo_controller = self.expression_engine.servo_controller
+                logger.debug(f"Expression engine has servo_controller: {servo_controller is not None}")
                 if servo_controller:
                     # Get sensitivity from speaking expression (default 0.7)
                     speaking_expr = self.expression_engine.expressions.get('speaking', {})
@@ -374,10 +376,15 @@ class VoiceHandler:
                     sensitivity = mouth_config.get('sensitivity', 0.7)
                     max_angle = mouth_config.get('max_angle', 50)
 
+                    logger.info(f"🗣️ Starting mouth animation (sensitivity={sensitivity}, max_angle={max_angle})")
                     servo_controller.start_speech_animation(
                         base_amplitude=sensitivity,
                         max_angle_override=max_angle
                     )
+                else:
+                    logger.warning("Servo controller is None - no mouth animation")
+            else:
+                logger.warning(f"No expression engine or servo_controller attribute - no mouth animation")
 
             try:
                 if self.tts_engine == 'piper' and self.piper_voice:

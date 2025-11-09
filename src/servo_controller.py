@@ -446,7 +446,9 @@ class ServoController:
             self.current_mouth = angle
 
             # Schedule detach after idle period (jitter reduction)
-            self._schedule_detach()
+            # BUT not during speech animation - mouth needs to stay active!
+            if not self.speech_animation_active:
+                self._schedule_detach()
 
     # =========================================================================
     # PERSONALITY METHODS - TARS Character
@@ -622,6 +624,9 @@ class ServoController:
         """
         Start animating mouth during speech
 
+        Detaches eyelid servos to prevent jitter during speech while allowing
+        independent eye expressions. Only mouth servo remains active.
+
         Args:
             base_amplitude: Base amplitude for mouth movement (0.0-1.0) - from expressions.yaml sensitivity
             max_angle_override: Override max angle (from expressions.yaml speaking.mouth.max_angle)
@@ -629,6 +634,15 @@ class ServoController:
         if self.speech_animation_active:
             logger.debug("Speech animation already active")
             return
+
+        # Detach eye servos to prevent jitter during speech
+        # This also allows eye expressions to be changed independently
+        try:
+            self.left_eyelid.detach()
+            self.right_eyelid.detach()
+            logger.debug("Eye servos detached for speech (prevents jitter, allows independent expressions)")
+        except:
+            pass
 
         self.speech_animation_active = True
         self._speech_animation_thread = threading.Thread(
