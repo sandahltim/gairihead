@@ -189,7 +189,7 @@ String expressionToEmoji(String expr) {
 
 void wrapText(String text, int x, int y, int maxWidth, int lineHeight, uint16_t color) {
   tft.setTextColor(color);
-  tft.setTextSize(2);  // Increased size for better readability
+  tft.setTextSize(1);  // Size 1 for better fitting on 2.8" display
 
   int cursorX = x;
   int cursorY = y;
@@ -296,7 +296,7 @@ void drawConversationView() {
     tft.setCursor(SCREEN_WIDTH - 50, 15);
     tft.print(F("(1/2)"));
 
-    wrapText(userText, 10, 50, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+    wrapText(userText, 10, 50, SCREEN_WIDTH - 20, 12, COLOR_TEXT);
 
     // Listening indicator
     if (systemState == "listening") {
@@ -317,7 +317,7 @@ void drawConversationView() {
     tft.setCursor(SCREEN_WIDTH - 50, 15);
     tft.print(F("(2/2)"));
 
-    wrapText(gairiText, 10, 50, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+    wrapText(gairiText, 10, 50, SCREEN_WIDTH - 20, 12, COLOR_TEXT);
 
     // Footer
     tft.setTextSize(1);
