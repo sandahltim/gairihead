@@ -173,6 +173,17 @@ class ArduinoDisplay:
         Returns:
             True if sent successfully
         """
+        # Truncate text to prevent Arduino memory errors (ESP32 has ~2KB JSON buffer)
+        # Reserve space for JSON structure (~150 chars), leave ~900 chars for content
+        MAX_USER_TEXT = 200
+        MAX_GAIRI_TEXT = 700
+
+        if len(user_text) > MAX_USER_TEXT:
+            user_text = user_text[:MAX_USER_TEXT-3] + "..."
+
+        if len(gairi_text) > MAX_GAIRI_TEXT:
+            gairi_text = gairi_text[:MAX_GAIRI_TEXT-3] + "..."
+
         message = {
             "type": "conversation",
             "user_text": user_text,

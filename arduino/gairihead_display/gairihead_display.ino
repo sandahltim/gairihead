@@ -78,6 +78,9 @@ enum DisplayView {
 
 DisplayView currentView = VIEW_CONVERSATION;
 
+// Conversation pagination (0 = user question, 1 = Gairi response)
+int conversationPage = 1;  // Start on Gairi response (most recent)
+
 // =============================================================================
 // TOUCH BUTTON STRUCTURE
 // =============================================================================
@@ -242,40 +245,82 @@ bool isTouchInButton(TSPoint p, TouchButton btn) {
 }
 
 // =============================================================================
-// VIEW: CONVERSATION
+// VIEW: CONVERSATION (PAGINATED)
 // =============================================================================
 
-void drawConversationView() {
+// Page 0: User Question View
+void drawUserQuestionView() {
   tft.fillScreen(COLOR_BG);
 
-  // Title
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_TITLE);
-  tft.setCursor(10, 10);
-  tft.print("Conversation");
-
-  // Expression emoji (size 2 to prevent wrapping)
-  tft.setTextSize(2);
-  tft.setTextColor(COLOR_EXPR);
-  tft.setCursor(SCREEN_WIDTH - 60, 10);
-  tft.print(expressionToEmoji(expression));
-
-  // User text
+  // Title with page indicator
   tft.setTextSize(2);
   tft.setTextColor(COLOR_USER);
-  tft.setCursor(10, 45);
-  tft.print("User:");
+  tft.setCursor(10, 10);
+  tft.print("User Question");
 
-  wrapText(userText, 10, 65, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+  // Page indicator
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_AUTH_2);
+  tft.setCursor(SCREEN_WIDTH - 50, 15);
+  tft.print("(1/2)");
 
-  // Gairi text
-  int gairiY = 135;
+  // Expression emoji
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_EXPR);
+  tft.setCursor(SCREEN_WIDTH - 60, 35);
+  tft.print(expressionToEmoji(expression));
+
+  // User text (much more vertical space now!)
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_TEXT);
+  wrapText(userText, 10, 70, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+
+  // Listening indicator (show if in listening state)
+  if (systemState == "listening") {
+    // Show prominent mic indicator
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_EXPR);
+    tft.setCursor(10, 200);
+    tft.print("MIC LISTENING...");
+
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_AUTH_2);
+    tft.setCursor(10, 225);
+    tft.print("Speak now");
+  }
+
+  // Touch buttons
+  drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Demo", COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
+}
+
+// Page 1: Gairi Response View
+void drawGairiResponseView() {
+  tft.fillScreen(COLOR_BG);
+
+  // Title with page indicator
   tft.setTextSize(2);
   tft.setTextColor(COLOR_GAIRI);
-  tft.setCursor(10, gairiY);
-  tft.print("Gairi:");
+  tft.setCursor(10, 10);
+  tft.print("Gairi Response");
 
-  wrapText(gairiText, 10, gairiY + 20, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
+  // Page indicator
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_AUTH_2);
+  tft.setCursor(SCREEN_WIDTH - 50, 15);
+  tft.print("(2/2)");
+
+  // Expression emoji
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_EXPR);
+  tft.setCursor(SCREEN_WIDTH - 60, 35);
+  tft.print(expressionToEmoji(expression));
+
+  // Gairi text (much more vertical space now!)
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_TEXT);
+  wrapText(gairiText, 10, 70, SCREEN_WIDTH - 20, 18, COLOR_TEXT);
 
   // Footer info
   tft.setTextSize(1);
@@ -291,6 +336,15 @@ void drawConversationView() {
   drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, "<", COLOR_BUTTON, COLOR_TEXT);
   drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, "Demo", COLOR_BUTTON, COLOR_TEXT);
   drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, ">", COLOR_BUTTON, COLOR_TEXT);
+}
+
+// Main conversation view dispatcher
+void drawConversationView() {
+  if (conversationPage == 0) {
+    drawUserQuestionView();
+  } else {
+    drawGairiResponseView();
+  }
 }
 
 // =============================================================================
@@ -335,6 +389,14 @@ void drawStatusView() {
   tft.print(" (");
   tft.print(expression);
   tft.print(")");
+
+  // Show listening indicator if in listening state
+  if (systemState == "listening") {
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_EXPR);
+    tft.setCursor(150, 110);
+    tft.print("MIC");
+  }
 
   // Confidence
   tft.setTextSize(2);
@@ -506,8 +568,12 @@ void handleJsonMessage(String json) {
     confidence = doc["confidence"] | 0.0;
     expression = doc["expression"].as<String>();
 
+    // Redraw current view to show state changes (especially listening indicator)
     if (currentView == VIEW_STATUS) {
       drawStatusView();
+    } else if (currentView == VIEW_CONVERSATION && conversationPage == 0) {
+      // Redraw user question view to show listening indicator
+      drawUserQuestionView();
     }
 
     Serial.println(F("{\"ok\":1}"));
@@ -555,15 +621,29 @@ void handleTouch() {
   // Check which button was pressed
   if (isTouchInButton(p, btnLeft)) {
     Serial.println(F("{\"touch\":\"left\"}"));
-    previousView();
+
+    // If in conversation view, cycle conversation pages
+    if (currentView == VIEW_CONVERSATION) {
+      conversationPage = (conversationPage == 0) ? 1 : 0;
+      drawConversationView();
+    } else {
+      previousView();
+    }
 
   } else if (isTouchInButton(p, btnRight)) {
     Serial.println(F("{\"touch\":\"right\"}"));
-    nextView();
+
+    // If in conversation view, cycle conversation pages
+    if (currentView == VIEW_CONVERSATION) {
+      conversationPage = (conversationPage == 0) ? 1 : 0;
+      drawConversationView();
+    } else {
+      nextView();
+    }
 
   } else if (isTouchInButton(p, btnCenter)) {
     Serial.println(F("{\"touch\":\"center\"}"));
-    // Reserved for future actions
+    // Reserved for future actions (voice trigger)
   }
 }
 
