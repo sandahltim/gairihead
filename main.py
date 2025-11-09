@@ -297,94 +297,96 @@ class GairiHeadAssistant:
                 )
             return
 
-        # Mark as in interaction
-        self.in_interaction = True
-        self.interaction_count += 1
-
-        logger.info(f"\n{'=' * 60}")
-        logger.info(f"Interaction #{self.interaction_count}")
-        logger.info(f"{'=' * 60}")
-
-        # Step 1: Visual scan for authorization (HAPPENS ON BUTTON PRESS)
-        logger.info("👁️  Step 1: Scanning for face authorization...")
-
-        # Update Arduino display: Scanning state
-        if self.arduino_display and self.arduino_display.connected:
-            self.arduino_display.update_status(
-                state="scanning",
-                expression="alert",
-                user="unknown",
-                level=3,
-                confidence=0.0
-            )
-
-        # Update expression: alert (looking at user)
-        if self.expression_engine:
-            try:
-                self.expression_engine.set_expression('alert')
-            except:
-                pass
-
-        # Perform face recognition
-        authorization = self.get_authorization()
-
-        auth_level_name = {1: 'Main User', 2: 'Guest', 3: 'Stranger'}
-        logger.info(f"🔐 Authorization: Level {authorization['level']} ({auth_level_name[authorization['level']]})")
-        logger.info(f"   User: {authorization['user']}, Confidence: {authorization['confidence']:.2f}")
-
-        # Update Arduino with authorization result
-        if self.arduino_display and self.arduino_display.connected:
-            self.arduino_display.update_status(
-                state="authorized",
-                expression="idle",
-                user=authorization['user'],
-                level=authorization['level'],
-                confidence=authorization['confidence']
-            )
-
-        # Brief pause to show authorization result
-        await asyncio.sleep(0.5)
-
-        # Step 2: Voice interaction
-        logger.info("🎤 Step 2: Ready for voice query...")
-        logger.info("   (Speak when ready - stops automatically when done)")
-
         try:
-            # Process voice query with VAD (auto-stops when done speaking)
-            # Voice handler will update Arduino display during listening/thinking/speaking
-            response = self.voice.process_voice_query(
-                use_vad=True,  # Use Voice Activity Detection (auto-stop)
-                authorization=authorization
-            )
+            # Mark as in interaction
+            self.in_interaction = True
+            self.interaction_count += 1
 
-            if response:
-                logger.success(f"✅ Interaction #{self.interaction_count} complete")
-            else:
-                logger.warning("⚠️ Interaction failed - no response")
+            logger.info(f"\n{'=' * 60}")
+            logger.info(f"Interaction #{self.interaction_count}")
+            logger.info(f"{'=' * 60}")
 
-        except Exception as e:
-            logger.error(f"❌ Interaction error: {e}")
+            # Step 1: Visual scan for authorization (HAPPENS ON BUTTON PRESS)
+            logger.info("👁️  Step 1: Scanning for face authorization...")
 
-            # Show error state on display
+            # Update Arduino display: Scanning state
             if self.arduino_display and self.arduino_display.connected:
                 self.arduino_display.update_status(
-                    state="error",
-                    expression="confused"
+                    state="scanning",
+                    expression="alert",
+                    user="unknown",
+                    level=3,
+                    confidence=0.0
                 )
 
-        # Return to idle
-        if self.expression_engine:
+            # Update expression: alert (looking at user)
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('alert')
+                except:
+                    pass
+
+            # Perform face recognition
+            authorization = self.get_authorization()
+
+            auth_level_name = {1: 'Main User', 2: 'Guest', 3: 'Stranger'}
+            logger.info(f"🔐 Authorization: Level {authorization['level']} ({auth_level_name[authorization['level']]})")
+            logger.info(f"   User: {authorization['user']}, Confidence: {authorization['confidence']:.2f}")
+
+            # Update Arduino with authorization result
+            if self.arduino_display and self.arduino_display.connected:
+                self.arduino_display.update_status(
+                    state="authorized",
+                    expression="idle",
+                    user=authorization['user'],
+                    level=authorization['level'],
+                    confidence=authorization['confidence']
+                )
+
+            # Brief pause to show authorization result
+            await asyncio.sleep(0.5)
+
+            # Step 2: Voice interaction
+            logger.info("🎤 Step 2: Ready for voice query...")
+            logger.info("   (Speak when ready - stops automatically when done)")
+
             try:
-                self.expression_engine.set_expression('idle')
-            except:
-                pass
+                # Process voice query with VAD (auto-stops when done speaking)
+                # Voice handler will update Arduino display during listening/thinking/speaking
+                response = self.voice.process_voice_query(
+                    use_vad=True,  # Use Voice Activity Detection (auto-stop)
+                    authorization=authorization
+                )
 
-        # Release hardware lock
-        coordinator.release()
+                if response:
+                    logger.success(f"✅ Interaction #{self.interaction_count} complete")
+                else:
+                    logger.warning("⚠️ Interaction failed - no response")
 
-        # Mark interaction complete and update timestamp
-        self.in_interaction = False
-        self.last_interaction_time = time.time()
+            except Exception as e:
+                logger.error(f"❌ Interaction error: {e}")
+
+                # Show error state on display
+                if self.arduino_display and self.arduino_display.connected:
+                    self.arduino_display.update_status(
+                        state="error",
+                        expression="confused"
+                    )
+
+            # Return to idle
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('idle')
+                except:
+                    pass
+
+        finally:
+            # ALWAYS release hardware lock (even if exception occurs)
+            coordinator.release()
+
+            # Mark interaction complete and update timestamp
+            self.in_interaction = False
+            self.last_interaction_time = time.time()
     
     async def run_interactive_mode(self):
         """
