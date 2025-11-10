@@ -353,6 +353,65 @@ class VoiceHandler:
             self.stats['transcription_failures'] += 1
             return None
 
+    def _clean_text_for_tts(self, text: str) -> str:
+        """
+        Clean text for TTS by removing/replacing punctuation that sounds bad when read aloud
+
+        Args:
+            text: Original text
+
+        Returns:
+            Cleaned text suitable for TTS
+        """
+        import re
+
+        # Remove URLs (they sound terrible when read)
+        text = re.sub(r'http[s]?://\S+', '', text)
+
+        # Replace common punctuation with pauses
+        text = text.replace('...', '. ')  # Ellipsis to period
+        text = text.replace('…', '. ')    # Unicode ellipsis
+
+        # Remove quotes (TTS doesn't need to say "quote")
+        text = text.replace('"', '')
+        text = text.replace('"', '')
+        text = text.replace('"', '')
+        text = text.replace("'", '')
+        text = text.replace("'", '')
+        text = text.replace("'", '')
+
+        # Replace dashes with pauses
+        text = text.replace(' - ', ', ')
+        text = text.replace(' — ', ', ')
+        text = text.replace(' – ', ', ')
+
+        # Remove parentheses (keep content, remove parens)
+        text = text.replace('(', '')
+        text = text.replace(')', '')
+        text = text.replace('[', '')
+        text = text.replace(']', '')
+
+        # Remove asterisks (markdown emphasis)
+        text = text.replace('*', '')
+
+        # Remove underscores (markdown emphasis)
+        text = text.replace('_', ' ')
+
+        # Replace semicolons with commas (more natural pause)
+        text = text.replace(';', ',')
+
+        # Remove colons that aren't part of time (e.g., "Note: " becomes "Note. ")
+        text = re.sub(r':\s', '. ', text)
+
+        # Clean up multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+
+        # Clean up multiple punctuation
+        text = re.sub(r'\.{2,}', '.', text)  # Multiple periods to single
+        text = re.sub(r',{2,}', ',', text)   # Multiple commas to single
+
+        return text.strip()
+
     def speak(self, text: str) -> bool:
         """
         Speak text using TTS (Piper or pyttsx3) with mouth animation
@@ -366,7 +425,10 @@ class VoiceHandler:
         try:
             self._init_tts_engine()
 
-            logger.info(f"🔊 Speaking: \"{text[:50]}{'...' if len(text) > 50 else ''}\"")
+            # Clean text for TTS (remove punctuation that sounds bad)
+            cleaned_text = self._clean_text_for_tts(text)
+
+            logger.info(f"🔊 Speaking: \"{cleaned_text[:50]}{'...' if len(cleaned_text) > 50 else ''}\"")
             start_time = time.time()
 
             # Get servo controller for mouth animation (start later, after TTS synthesis)
@@ -387,7 +449,7 @@ class VoiceHandler:
                 if self.tts_engine == 'piper' and self.piper_voice:
                     # Use Piper TTS
                     audio_bytes = bytearray()
-                    for chunk in self.piper_voice.synthesize(text):
+                    for chunk in self.piper_voice.synthesize(cleaned_text):
                         audio_bytes.extend(chunk.audio_int16_bytes)
 
                     # Play audio directly with sounddevice WITH AUDIO-REACTIVE MOUTH MOVEMENT
@@ -500,7 +562,7 @@ class VoiceHandler:
                             max_angle_override=mouth_animation_params['max_angle']
                         )
 
-                    self.tts_engine.say(text)
+                    self.tts_engine.say(cleaned_text)
                     self.tts_engine.runAndWait()
 
                     # Return mouth to neutral after pyttsx3 speech
