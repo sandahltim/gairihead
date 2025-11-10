@@ -112,7 +112,8 @@ class GairiHeadServer:
             try:
                 from arduino_display import ArduinoDisplay
                 # Try to connect to Arduino (USB connection)
-                display_config = self.config.get('arduino_display', {})
+                hardware_config = self.config.get('hardware', {})
+                display_config = hardware_config.get('arduino_display', {})
                 port = display_config.get('port', '/dev/ttyACM0')
                 enabled = display_config.get('enabled', True)
                 self.arduino_display = ArduinoDisplay(port=port, enabled=enabled)
