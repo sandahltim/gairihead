@@ -609,6 +609,15 @@ class GairiHeadServer:
                 }
 
             finally:
+                # Close Arduino display to release serial port for main.py
+                if self.arduino_display and self.arduino_display.connected:
+                    try:
+                        self.arduino_display.close()
+                        self.arduino_display = None  # Force reconnect on next use
+                        logger.debug("Arduino display closed (serial port released)")
+                    except Exception as e:
+                        logger.debug(f"Arduino display close failed: {e}")
+
                 # Always release hardware lock
                 coordinator.release()
 

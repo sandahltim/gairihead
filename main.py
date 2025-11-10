@@ -412,6 +412,14 @@ class GairiHeadAssistant:
                 except Exception as e:
                     logger.debug(f"Servo close failed: {e}")
 
+            # Close Arduino display to release serial port for server access
+            if self.arduino_display and self.arduino_display.connected:
+                try:
+                    self.arduino_display.close()
+                    logger.debug("Arduino display closed (serial port released for server)")
+                except Exception as e:
+                    logger.debug(f"Arduino display close failed: {e}")
+
             # ALWAYS release hardware lock (even if exception occurs)
             coordinator.release()
 
@@ -489,6 +497,30 @@ class GairiHeadAssistant:
 
         try:
             while self.running:
+                # Reconnect Arduino if needed (after server released it)
+                if not self.arduino_display or not self.arduino_display.connected:
+                    try:
+                        display_config = self.config.get('hardware', {}).get('arduino_display', {})
+                        self.arduino_display = ArduinoDisplay(
+                            port=display_config.get('port', '/dev/ttyACM0'),
+                            baudrate=display_config.get('baudrate', 115200),
+                            enabled=True
+                        )
+                        if self.arduino_display.connected:
+                            logger.debug("Arduino display reconnected")
+                            # Restore idle state
+                            self.arduino_display.update_status(
+                                state="idle",
+                                expression="idle",
+                                user="ready",
+                                level=3,
+                                confidence=0.0
+                            )
+                    except Exception as e:
+                        logger.debug(f"Arduino reconnect failed: {e}")
+                        await asyncio.sleep(1.0)  # Wait before retry
+                        continue
+
                 # Check for touch commands from Arduino
                 cmd = self.arduino_display.check_commands()
 

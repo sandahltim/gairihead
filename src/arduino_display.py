@@ -250,7 +250,10 @@ class ArduinoDisplay:
         Returns:
             Command dict if received, None otherwise
         """
-        return self._receive(timeout=0.1)
+        cmd = self._receive(timeout=0.1)
+        if cmd:
+            logger.info(f"📥 Received command from Arduino: {cmd}")
+        return cmd
 
     def close(self):
         """Close serial connection"""

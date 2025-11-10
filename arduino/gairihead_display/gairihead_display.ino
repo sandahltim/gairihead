@@ -503,7 +503,7 @@ void previousView() {
 // =============================================================================
 
 void handleJsonMessage(String json) {
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<2048> doc;  // 2KB buffer - plenty of headroom for conversation messages (max ~1080 bytes)
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
