@@ -96,3 +96,11 @@ test_*_simple.py
 data/piper_voices/*.onnx
 data/piper_voices/*.json
 .env
+
+# Process ID files
+*.pid
+
+# Session notes
+*.txt
+!requirements.txt
+!docs/*.txt

@@ -18,8 +18,11 @@ import base64
 import io
 import time
 import os
+import signal
+import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
+from collections import defaultdict, deque
 import websockets
 from loguru import logger
 import yaml
@@ -30,6 +33,92 @@ import cv2
 import sounddevice as sd
 import soundfile as sf
 
+
+# =============================================================================
+# RATE LIMITER
+# =============================================================================
+
+class RateLimiter:
+    """
+    Rate limiter for WebSocket connections
+    Tracks requests per connection and enforces limits
+    """
+
+    def __init__(self, requests_per_minute: int = 30, window_seconds: int = 60):
+        """
+        Initialize rate limiter
+
+        Args:
+            requests_per_minute: Maximum requests allowed per minute per connection
+            window_seconds: Time window for tracking requests (default 60s)
+        """
+        self.requests_per_minute = requests_per_minute
+        self.window_seconds = window_seconds
+
+        # Track request timestamps per connection
+        # Key: connection ID, Value: deque of request timestamps
+        self.request_history: Dict[Any, deque] = defaultdict(lambda: deque())
+
+        # Track violations per connection (for exponential backoff)
+        self.violations: Dict[Any, int] = defaultdict(int)
+
+        logger.info(f"⏱️  Rate limiter initialized: {requests_per_minute} requests/minute")
+
+    def check_rate_limit(self, connection_id: Any) -> tuple[bool, Optional[str]]:
+        """
+        Check if connection has exceeded rate limit
+
+        Args:
+            connection_id: Unique identifier for the connection
+
+        Returns:
+            Tuple of (allowed: bool, error_message: Optional[str])
+        """
+        now = time.time()
+
+        # Get request history for this connection
+        history = self.request_history[connection_id]
+
+        # Remove requests outside the time window
+        while history and history[0] < now - self.window_seconds:
+            history.popleft()
+
+        # Check if limit exceeded
+        if len(history) >= self.requests_per_minute:
+            # Rate limit exceeded
+            self.violations[connection_id] += 1
+            violation_count = self.violations[connection_id]
+
+            # Calculate backoff time (exponential)
+            backoff_seconds = min(300, 10 * (2 ** (violation_count - 1)))  # Max 5 minutes
+
+            logger.warning(
+                f"🚫 Rate limit exceeded for {connection_id}: "
+                f"{len(history)} requests in {self.window_seconds}s "
+                f"(violation #{violation_count}, backoff: {backoff_seconds}s)"
+            )
+
+            error_msg = (
+                f"Rate limit exceeded: {self.requests_per_minute} requests per minute. "
+                f"Please wait {backoff_seconds} seconds before retrying."
+            )
+            return False, error_msg
+
+        # Allowed - record this request
+        history.append(now)
+        return True, None
+
+    def cleanup_connection(self, connection_id: Any):
+        """Remove tracking data for a disconnected connection"""
+        if connection_id in self.request_history:
+            del self.request_history[connection_id]
+        if connection_id in self.violations:
+            del self.violations[connection_id]
+
+
+# =============================================================================
+# GAIRIHEAD SERVER
+# =============================================================================
 
 class GairiHeadServer:
     """Websocket server for GairiHead remote control"""
@@ -77,11 +166,19 @@ class GairiHeadServer:
         self.voice_handler = None
         self.expression_engine = None
 
+        # Connection management
+        self.active_connections: Set[websockets.WebSocketServerProtocol] = set()
+        self.max_connections = 10  # Moderate limit
+
+        # Rate limiting
+        self.rate_limiter = RateLimiter(requests_per_minute=30, window_seconds=60)
+
         # Status
         self.is_running = False
         self.current_expression = "idle"
 
         logger.info(f"GairiHead server initialized on {host}:{port}")
+        logger.info(f"🔒 Max concurrent connections: {self.max_connections}")
 
     def _get_camera(self):
         """Lazy init camera manager"""
@@ -721,49 +818,76 @@ class GairiHeadServer:
         client_addr = websocket.remote_address
         logger.info(f"Client connected: {client_addr}")
 
-        # Authentication check
-        authenticated = False
-        if self.api_token:
-            # Require authentication
+        # Connection limit check
+        if len(self.active_connections) >= self.max_connections:
+            logger.warning(f"🚫 Connection limit reached ({self.max_connections}), rejecting {client_addr}")
             try:
-                # Wait for auth message (first message must be auth)
-                auth_message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                auth_data = json.loads(auth_message)
+                await websocket.send(json.dumps({
+                    'status': 'error',
+                    'error': f'Server connection limit reached ({self.max_connections} active connections). Please try again later.'
+                }))
+                await websocket.close()
+            except:
+                pass
+            return
 
-                # Check token
-                provided_token = auth_data.get('token')
-                if provided_token == self.api_token:
-                    authenticated = True
-                    logger.info(f"✅ Client authenticated: {client_addr}")
-                    # Send auth success
-                    await websocket.send(json.dumps({
-                        'status': 'authenticated',
-                        'message': 'Authentication successful'
-                    }))
-                else:
-                    logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid token")
+        # Add to active connections
+        self.active_connections.add(websocket)
+        logger.debug(f"Active connections: {len(self.active_connections)}")
+
+        try:
+            # Authentication check
+            authenticated = False
+            if self.api_token:
+                # Require authentication
+                try:
+                    # Wait for auth message (first message must be auth)
+                    auth_message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                    auth_data = json.loads(auth_message)
+
+                    # Check token
+                    provided_token = auth_data.get('token')
+                    if provided_token == self.api_token:
+                        authenticated = True
+                        logger.info(f"✅ Client authenticated: {client_addr}")
+                        # Send auth success
+                        await websocket.send(json.dumps({
+                            'status': 'authenticated',
+                            'message': 'Authentication successful'
+                        }))
+                    else:
+                        logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid token")
+                        await websocket.send(json.dumps({
+                            'status': 'error',
+                            'error': 'Authentication failed: Invalid token'
+                        }))
+                        await websocket.close()
+                        return
+
+                except (asyncio.TimeoutError, json.JSONDecodeError, KeyError):
+                    logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid auth message")
                     await websocket.send(json.dumps({
                         'status': 'error',
-                        'error': 'Authentication failed: Invalid token'
+                        'error': 'Authentication failed: Invalid auth message'
                     }))
                     await websocket.close()
                     return
+            else:
+                # No token configured - allow all connections (insecure)
+                authenticated = True
 
-            except (asyncio.TimeoutError, json.JSONDecodeError, KeyError):
-                logger.warning(f"🚫 Authentication failed for {client_addr}: Invalid auth message")
-                await websocket.send(json.dumps({
-                    'status': 'error',
-                    'error': 'Authentication failed: Invalid auth message'
-                }))
-                await websocket.close()
-                return
-        else:
-            # No token configured - allow all connections (insecure)
-            authenticated = True
-
-        # Main message loop (only reached if authenticated)
-        try:
+            # Main message loop (only reached if authenticated)
             async for message in websocket:
+                # Rate limiting check
+                allowed, error_msg = self.rate_limiter.check_rate_limit(client_addr)
+                if not allowed:
+                    response = {
+                        'status': 'error',
+                        'error': error_msg
+                    }
+                    await websocket.send(json.dumps(response))
+                    continue
+
                 # Parse command
                 try:
                     command = json.loads(message)
@@ -785,6 +909,11 @@ class GairiHeadServer:
             logger.info(f"Client disconnected: {client_addr}")
         except Exception as e:
             logger.error(f"Error handling client {client_addr}: {e}")
+        finally:
+            # Clean up connection tracking
+            self.active_connections.discard(websocket)
+            self.rate_limiter.cleanup_connection(client_addr)
+            logger.debug(f"Connection cleaned up. Active connections: {len(self.active_connections)}")
 
     async def start(self):
         """Start websocket server"""
@@ -797,14 +926,94 @@ class GairiHeadServer:
             await asyncio.Future()  # Run forever
 
     def cleanup(self):
-        """Clean up resources"""
-        if self.camera_manager:
-            self.camera_manager.release()
-        if self.servo_controller:
-            self.servo_controller.cleanup()
-        if self.arduino_display:
-            self.arduino_display.close()
-        logger.info("GairiHead server cleaned up")
+        """Clean up resources with timeout protection"""
+        logger.info("Starting resource cleanup...")
+
+        # Camera cleanup
+        if self.camera_manager is not None:
+            try:
+                self.camera_manager.release()
+                logger.debug("✓ Camera released")
+            except Exception as e:
+                logger.warning(f"Camera cleanup error: {e}")
+
+        # Servo controller cleanup
+        if self.servo_controller is not None:
+            try:
+                self.servo_controller.cleanup()
+                logger.debug("✓ Servos cleaned up")
+            except Exception as e:
+                logger.warning(f"Servo cleanup error: {e}")
+
+        # Arduino display cleanup
+        if self.arduino_display is not None:
+            try:
+                if hasattr(self.arduino_display, 'connected') and self.arduino_display.connected:
+                    self.arduino_display.close()
+                logger.debug("✓ Arduino display closed")
+            except Exception as e:
+                logger.warning(f"Arduino cleanup error: {e}")
+
+        # Voice handler cleanup
+        if self.voice_handler is not None:
+            try:
+                # Voice handler cleanup (if method exists)
+                if hasattr(self.voice_handler, 'cleanup'):
+                    self.voice_handler.cleanup()
+                logger.debug("✓ Voice handler cleaned up")
+            except Exception as e:
+                logger.warning(f"Voice handler cleanup error: {e}")
+
+        # Expression engine cleanup (already cleans up servos)
+        if self.expression_engine is not None:
+            try:
+                if hasattr(self.expression_engine, 'cleanup'):
+                    self.expression_engine.cleanup()
+                logger.debug("✓ Expression engine cleaned up")
+            except Exception as e:
+                logger.warning(f"Expression engine cleanup error: {e}")
+
+        logger.success("✅ GairiHead server cleaned up")
+
+    async def shutdown_gracefully(self):
+        """
+        Gracefully shutdown server
+        1. Stop accepting new connections
+        2. Close active websocket connections
+        3. Cleanup resources
+        4. Exit
+        """
+        logger.info("🛑 Graceful shutdown initiated...")
+
+        # Stop server
+        self.is_running = False
+
+        # Close all active websocket connections
+        if self.active_connections:
+            logger.info(f"Closing {len(self.active_connections)} active connections...")
+            close_tasks = []
+            for websocket in list(self.active_connections):
+                try:
+                    # Notify client of shutdown
+                    await websocket.send(json.dumps({
+                        'status': 'shutdown',
+                        'message': 'Server is shutting down'
+                    }))
+                    close_tasks.append(websocket.close())
+                except Exception as e:
+                    logger.debug(f"Error notifying client of shutdown: {e}")
+
+            # Wait for all closes with timeout
+            if close_tasks:
+                try:
+                    await asyncio.wait_for(asyncio.gather(*close_tasks, return_exceptions=True), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Websocket close timeout, forcing shutdown")
+
+        # Cleanup hardware resources
+        self.cleanup()
+
+        logger.success("✅ Graceful shutdown complete")
 
 
 # =============================================================================
@@ -812,16 +1021,51 @@ class GairiHeadServer:
 # =============================================================================
 
 async def main():
-    """Run GairiHead server"""
+    """Run GairiHead server with signal handling"""
     server = GairiHeadServer()
 
+    # Shutdown event for signal handlers
+    shutdown_event = asyncio.Event()
+
+    def signal_handler(sig, frame):
+        """Handle shutdown signals"""
+        sig_name = signal.Signals(sig).name
+        logger.info(f"📡 Received {sig_name} signal, initiating shutdown...")
+        shutdown_event.set()
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # systemd stop
+
+    logger.info("Signal handlers registered (SIGINT, SIGTERM)")
+
     try:
-        await server.start()
+        # Start server in background task
+        server_task = asyncio.create_task(server.start())
+
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+
+        # Cancel server task
+        server_task.cancel()
+
+        # Graceful shutdown
+        await server.shutdown_gracefully()
+
     except KeyboardInterrupt:
-        logger.info("Server interrupted by user")
-    finally:
+        logger.info("Server interrupted by user (KeyboardInterrupt)")
+        await server.shutdown_gracefully()
+    except Exception as e:
+        logger.error(f"Server error: {e}")
         server.cleanup()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        # Already handled in main()
+        pass
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1)
