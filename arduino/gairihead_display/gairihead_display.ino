@@ -298,12 +298,12 @@ void drawConversationView() {
 
     wrapText(userText, 10, 50, SCREEN_WIDTH - 20, 12, COLOR_TEXT);
 
-    // Listening indicator
+    // Listening indicator (green = active)
     if (systemState == "listening") {
       tft.setTextSize(2);
-      tft.setTextColor(COLOR_EXPR);
+      tft.setTextColor(COLOR_USER);  // Green for active listening
       tft.setCursor(10, 190);
-      tft.print(F("MIC ON"));
+      tft.print(F("LISTENING"));
     }
   } else {
     // Gairi Response Page
@@ -337,7 +337,7 @@ void drawConversationView() {
 
   // Touch buttons (both pages)
   drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_BUTTON, COLOR_TEXT);
-  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("OK"), COLOR_BUTTON, COLOR_TEXT);
+  drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("TALK"), COLOR_BUTTON, COLOR_TEXT);
   drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_BUTTON, COLOR_TEXT);
 }
 
@@ -353,6 +353,12 @@ void drawStatusView() {
   tft.setTextColor(COLOR_TITLE);
   tft.setCursor(10, 10);
   tft.print(F("Status"));
+
+  // Page indicator
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_AUTH_2);
+  tft.setCursor(SCREEN_WIDTH - 50, 15);
+  tft.print(F("(2/3)"));
 
   // User info with auth level color
   uint16_t authColor = COLOR_AUTH_3;
@@ -375,11 +381,22 @@ void drawStatusView() {
   tft.setCursor(10, 110);
   tft.print(systemState);
 
+  // State indicator badge
   if (systemState == "listening") {
-    tft.setTextSize(2);
-    tft.setTextColor(COLOR_EXPR);
-    tft.setCursor(150, 110);
-    tft.print(F("MIC"));
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_USER);  // Green
+    tft.setCursor(150, 115);
+    tft.print(F("[MIC]"));
+  } else if (systemState == "thinking") {
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_TITLE);  // Cyan
+    tft.setCursor(150, 115);
+    tft.print(F("[...]"));
+  } else if (systemState == "speaking") {
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_EXPR);  // Orange
+    tft.setCursor(150, 115);
+    tft.print(F("[>>>]"));
   }
 
   // Confidence bar
@@ -405,6 +422,12 @@ void drawDebugView() {
   tft.setTextColor(COLOR_TITLE);
   tft.setCursor(10, 10);
   tft.print(F("Debug"));
+
+  // Page indicator
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_AUTH_2);
+  tft.setCursor(SCREEN_WIDTH - 50, 15);
+  tft.print(F("(3/3)"));
 
   // Tier
   tft.setTextSize(1);
