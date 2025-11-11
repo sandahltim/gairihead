@@ -529,6 +529,8 @@ void handleJsonMessage(String json) {
     // Auto-switch to conversation view and display
     switchView(VIEW_CONVERSATION);
 
+    Serial.println(F("{\"ok\":1}"));
+
   } else if (strcmp(type, "status") == 0) {
     userName = doc["user"].as<String>();
     authLevel = doc["level"] | 3;
@@ -536,11 +538,11 @@ void handleJsonMessage(String json) {
     confidence = doc["confidence"] | 0.0;
     expression = doc["expression"].as<String>();
 
-    // Redraw current view to show state changes (especially listening indicator)
+    // Redraw current view to show state changes (especially listening indicator and expression emoji)
     if (currentView == VIEW_STATUS) {
       drawStatusView();
-    } else if (currentView == VIEW_CONVERSATION && conversationPage == 0) {
-      drawConversationView();
+    } else if (currentView == VIEW_CONVERSATION) {
+      drawConversationView();  // Redraw on BOTH pages to update emoji
     }
 
     Serial.println(F("{\"ok\":1}"));

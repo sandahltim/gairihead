@@ -1,5 +1,5 @@
 # Arduino Display Integration Status
-**Date**: 2025-11-07 (COMPLETE ✅)
+**Date**: 2025-11-10 (Updated with Data Flow Fixes ✅)
 **Hardware**: Arduino Mega 2560 + TP28017 2.8" TFT HAT
 **Library**: MCUFRIEND_kbv (8-bit parallel interface)
 
@@ -27,7 +27,64 @@
 
 ---
 
-## 🔧 Recent Fixes (2025-11-07)
+## 🔧 Recent Fixes
+
+### Fix 4: Display Data Flow Issues (2025-11-10)
+
+**Problems Identified**:
+1. Emoji not changing during interactions when viewing page 2 (Gairi Response)
+2. Conversation text disappearing after interaction completes
+3. Processes not running (stale PID file)
+4. Audio transcription inaccurate (very low RMS: 0.0474)
+
+**Root Cause Analysis**:
+
+**Issue #1: Emoji Update on Page 2**
+- **Location**: `gairihead_display.ino:542`
+- **Problem**: Status updates only redrawed conversation view on page 0 (User Question)
+```cpp
+// OLD CODE (only page 0)
+} else if (currentView == VIEW_CONVERSATION && conversationPage == 0) {
+    drawConversationView();
+}
+```
+- **Solution**: Removed page check to update on both pages
+```cpp
+// NEW CODE (both pages)
+} else if (currentView == VIEW_CONVERSATION) {
+    drawConversationView();  // Redraw on BOTH pages to update emoji
+}
+```
+
+**Issue #2: Conversation Text Persistence**
+- **Location**: `src/arduino_display.py:39,200,265-275` & `main.py:90,506,517-528`
+- **Problem**: When main.py closed Arduino after interaction, conversation data wasn't preserved. On reconnect, only status was sent (blank conversation).
+- **Solution**: Added conversation persistence
+  - `ArduinoDisplay.last_conversation` stores most recent conversation
+  - `restore_last_conversation()` method resends after reconnect
+  - main.py preserves conversation across Arduino instance changes
+
+**Issue #3: Process Management**
+- **Problem**: Neither main.py nor gairi_head_server.py were running
+- **Cause**: Stale PID file (process 28957 was dead)
+- **Solution**: Restart using `./scripts/start_gairihead.sh` (handles cleanup automatically)
+
+**Issue #4: Audio Quality**
+- **Diagnosis**: Microphone volume at 100%, configured correctly (EMEET OfficeCore M0 Plus)
+- **Solution**: User needs to speak louder/closer to mic for better transcription
+
+**Testing**:
+- ✅ Emoji now updates on both conversation pages
+- ✅ Conversation text persists after interaction completes
+- ✅ Both processes running correctly
+- ✅ arduino-cli installed for automated uploads (ARM64)
+- ✅ Arduino sketch uploaded with fixes
+
+**Result**: ✅ All display data flow issues resolved
+
+---
+
+## 🔧 Previous Fixes (2025-11-07)
 
 ### Fix 1: Touchscreen Pin Configuration (Commit c7eecb1)
 

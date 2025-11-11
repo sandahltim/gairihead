@@ -35,6 +35,9 @@ class ArduinoDisplay:
         self.serial: Optional[serial.Serial] = None
         self.connected = False
 
+        # Store last conversation for persistence across reconnects
+        self.last_conversation: Optional[Dict[str, Any]] = None
+
         if self.enabled:
             self._connect()
 
@@ -192,6 +195,10 @@ class ArduinoDisplay:
             "tier": tier,
             "response_time": round(response_time, 2)
         }
+
+        # Store conversation for persistence across reconnects
+        self.last_conversation = message.copy()
+
         return self._send(message)
 
     def update_status(self, user: str = "unknown", level: int = 3,
@@ -254,6 +261,18 @@ class ArduinoDisplay:
         if cmd:
             logger.info(f"📥 Received command from Arduino: {cmd}")
         return cmd
+
+    def restore_last_conversation(self) -> bool:
+        """
+        Restore the last conversation to the display after reconnect
+
+        Returns:
+            True if restored successfully, False if no conversation to restore
+        """
+        if self.last_conversation:
+            logger.debug("Restoring last conversation to display")
+            return self._send(self.last_conversation)
+        return False
 
     def close(self):
         """Close serial connection"""

@@ -1,6 +1,6 @@
 # GairiHead TODO & Roadmap
-**Last Updated**: 2025-11-08
-**Current Phase**: Hardware Integration (Servos Calibrated)
+**Last Updated**: 2025-11-10
+**Current Phase**: Hardware Integration (Arduino Display Fixes Complete)
 
 ---
 
@@ -251,6 +251,19 @@
 ---
 
 ## ✅ Recently Completed
+
+### 2025-11-10 Session (Display Data Flow Fixes)
+- [x] **Comprehensive GairiHead review** - Root cause analysis of display issues
+- [x] **Fixed emoji not updating** - Arduino now redraws emoji on both conversation pages (was only page 1)
+- [x] **Fixed conversation text disappearing** - Added persistence across Arduino reconnects
+  - Added `last_conversation` storage in ArduinoDisplay class
+  - Created `restore_last_conversation()` method
+  - Text now persists after interaction completes
+- [x] **Process management fixed** - Identified and resolved stale PID file issue
+- [x] **Audio diagnosis** - Verified microphone settings (100% volume, EMEET OfficeCore M0 Plus)
+- [x] **Installed arduino-cli** - ARM64 support for automated Arduino uploads
+- [x] **Uploaded Arduino sketch** - Applied emoji update fix to hardware
+- [x] **Applied Core Principle #10** - Fixed root problems (not symptoms)
 
 ### 2025-11-07 Session
 - [x] Fixed Arduino serial buffer overflow (64→512 bytes)

@@ -87,6 +87,7 @@ class GairiHeadAssistant:
         self.in_interaction = False  # Prevent overlapping interactions
         self.last_interaction_time = 0  # Timestamp of last interaction
         self.interaction_cooldown = 2.0  # Seconds to wait between interactions
+        self.last_conversation = None  # Store last conversation for display persistence
         
     async def initialize(self) -> bool:
         """
@@ -501,6 +502,9 @@ class GairiHeadAssistant:
                 if not self.arduino_display or not self.arduino_display.connected:
                     try:
                         display_config = self.config.get('hardware', {}).get('arduino_display', {})
+                        # Preserve last conversation from previous instance
+                        last_conv = self.arduino_display.last_conversation if self.arduino_display else None
+
                         self.arduino_display = ArduinoDisplay(
                             port=display_config.get('port', '/dev/ttyACM0'),
                             baudrate=display_config.get('baudrate', 115200),
@@ -508,14 +512,20 @@ class GairiHeadAssistant:
                         )
                         if self.arduino_display.connected:
                             logger.debug("Arduino display reconnected")
-                            # Restore idle state
-                            self.arduino_display.update_status(
-                                state="idle",
-                                expression="idle",
-                                user="ready",
-                                level=3,
-                                confidence=0.0
-                            )
+
+                            # Restore last conversation if available
+                            if last_conv:
+                                self.arduino_display.last_conversation = last_conv
+                                self.arduino_display.restore_last_conversation()
+                            else:
+                                # No conversation to restore, just show idle state
+                                self.arduino_display.update_status(
+                                    state="idle",
+                                    expression="idle",
+                                    user="ready",
+                                    level=3,
+                                    confidence=0.0
+                                )
                     except Exception as e:
                         logger.debug(f"Arduino reconnect failed: {e}")
                         await asyncio.sleep(1.0)  # Wait before retry
