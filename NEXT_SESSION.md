@@ -1,253 +1,201 @@
 # Next Session Preparation
-**Date Created**: 2025-11-07
-**Status**: Ready for next development session
+**Date Created:** 2025-11-11
+**Last Session:** Security Hardening & UI/UX Sprint 1
+**Status:** Ready for Next Session
 
 ---
 
-## 🎉 What Was Accomplished Today (2025-11-07)
+## 🎉 What Was Accomplished (2025-11-11)
 
-### Arduino Display - FULLY OPERATIONAL ✅
+### Security Hardening ✅
+- **WebSocket Rate Limiting**: 30 requests/minute per connection, max 10 connections
+- **Graceful Shutdown**: SIGTERM/SIGINT handlers, proper resource cleanup
+- **Enhanced Cleanup**: All resources (camera, servos, Arduino, voice, expression engine)
 
-**Problem Solved**: Serial buffer overflow causing message truncation
+### UI/UX Sprint 1 Complete ✅
+- **Animated State Indicators**: 5 states (idle, listening, thinking, speaking, error)
+- **Touch Feedback**: Instant button invert (150ms duration)
+- **Progress Bar**: Auto-triggers during long operations
+- **Animation System**: 20 FPS, partial updates, memory efficient
+- **Uploaded & Tested**: Running on Arduino hardware
 
-**Root Cause**:
-- Arduino Mega's default serial buffer: 64 bytes
-- JSON messages: 132+ bytes
-- Messages truncated at 63 bytes, causing parse errors
-
-**Solution Implemented**:
-1. **Increased serial buffer** (64→512 bytes in HardwareSerial.h)
-   - Edited: `~/.arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino/HardwareSerial.h`
-   - Changed line 53: `#define SERIAL_RX_BUFFER_SIZE 512`
-   - Global variables increased 1262→1712 bytes (20% RAM usage)
-
-2. **Added 20ms delay** for message arrival
-   - Allows full message to buffer before processing
-   - Prevents premature line ending detection
-
-3. **Fixed line ending detection** (\n and \r)
-   - Handles both Unix and Windows line endings
-   - Robust message termination
-
-4. **Improved text readability**
-   - Text size: 1→2
-   - Line height: 10→18 pixels
-   - Better wrapping and spacing
-
-5. **Fixed emoji display**
-   - Emoji size: 3→2 (prevents wrapping)
-   - Position: -50→-60 (fits on screen)
-   - Added 7 new emoji mappings (idle, neutral, concerned, etc.)
-
-**Verification**:
-- ✅ Short messages (132 bytes): Complete reception
-- ✅ Long messages (262 bytes): Complete reception
-- ✅ Text wrapping: Correct with size 2
-- ✅ Auto-switch to conversation view: Working
-- ✅ All emoji mappings: Displaying properly
-
-**Commits**:
-- 59c174f: Arduino display - serial buffer overflow and text readability
-- 52d2003: Consolidate status, add testing checklist and TODO roadmap
+**Commits:**
+- `7557fc0` - Security hardening (rate limiting + graceful shutdown)
+- `8fdeed2` - Sprint 1 UI/UX implementation
+- `47f194f` - Sprint 1 session documentation
 
 ---
 
 ## 📊 Current System State
 
-### What Works NOW ✅
-1. **Voice Pipeline** (tested 2025-11-07)
-   - Whisper STT: Base model, 2.8s load time
-   - pyttsx3 TTS: Functional (no speakers to verify audio)
-   - Microphone: C920 built-in, hw:2,0, 16kHz
-   - LLM: Connected to Gary ws://localhost:8765/ws
-
-2. **Arduino Display** (fully operational)
-   - TP28017 2.8" TFT, ILI9341 controller
-   - MCUFRIEND_kbv library (8-bit parallel)
-   - 3 views: Conversation, Status, Debug
-   - Touch navigation working
-   - Serial: 115200 baud, 512-byte buffer
-
-3. **Camera System**
-   - C920 USB webcam, /dev/video0
-   - 1920x1080 resolution
-   - 640x480 @ 5fps for face detection
-
-4. **Expression Engine v2.0**
-   - 24 emotions defined
-   - TARS personality complete
-   - Smooth movement with easing
-   - Personality quirks (winks, sighs)
-
-5. **Software Complete**
-   - All modules implemented
-   - WebSocket API operational
-   - Configuration system working
-   - Documentation comprehensive
+### What's Working NOW ✅
+1. **Voice Pipeline** - Full STT/TTS with audio-reactive mouth
+2. **Arduino Display** - Animated indicators, touch feedback, progress bars
+3. **Camera & Face Recognition** - Ready (needs Tim's training photos)
+4. **Servo Control** - Fully calibrated (0-75° range)
+5. **WebSocket API** - Secured with rate limiting and auth
+6. **Gary Integration** - Two-tier LLM routing
 
 ### What's Pending ⏳
-1. **Face Recognition Training** (15 min)
-   - System initialized
-   - ❌ No training photos yet
-   - Need 15-20 photos of Tim
-   - Script ready: `scripts/collect_face_photos_headless.py`
+1. **NeoPixel Wiring** - Hardware arrived, ready to wire tonight
+2. **Face Training** - Need 15-20 photos of Tim (15 min task)
+3. **UI/UX Sprint 2** - Error display & authorization visuals (4-5 hours)
+4. **UI/UX Sprint 3** - Idle screen enhancements (4-6 hours)
 
-2. **Servo Hardware** (awaiting delivery)
-   - Software complete and tested
-   - GPIO configured: 17, 27, 22
-   - Smooth movement algorithms ready
-   - 🔧 Physical servos not arrived
-
-3. **NeoPixel Rings** (awaiting hardware)
-   - Pico 2 not yet arrived
-   - Software architecture defined
-   - 12-pixel rings ordered
-   - 🔧 Waiting on delivery
-
-4. **Local LLM** (needs internet)
-   - Ollama install pending
-   - Llama 3.2 3B chosen
-   - Currently using Gary's cloud LLM
-   - ⚠️ Pi needs internet connection
+### What's Blocked 🔧
+**Nothing!** All dependencies resolved.
 
 ---
 
-## 🎯 Next Session Priorities
+## 🎯 Next Session Options
 
-### IMMEDIATE (< 30 minutes)
+### Option A: Continue UI/UX (Sprint 2)
+**Time:** 4-5 hours
+**Focus:** Error Display & Authorization Visuals
 
-1. **Face Recognition Training** [15 min] 🔴 HIGH PRIORITY
-   ```bash
-   cd /home/tim/GairiHead
-   source venv/bin/activate
-   python3 scripts/collect_face_photos_headless.py
-   # Capture 15-20 photos of Tim
-   # Script will generate face encodings automatically
-   ```
-   - **Blocker**: None
-   - **Impact**: Enables face recognition and user identification
-   - **Files**: `data/known_faces/tim/*.jpg`
+**What You'll Get:**
+- Red error banners (tap-to-dismiss, auto-hide 5s)
+- User avatars with color-coded borders (green/yellow/red)
+- Confidence bar graph (gradient visualization)
+- Authorization level badges (👑 Level 1, 👤 Level 2, 🚫 Level 3)
+- Error history (last 5 errors in EEPROM)
 
-2. **Voice Pipeline End-to-End Test** [10 min] 🔴 HIGH PRIORITY
-   ```bash
-   cd /home/tim/GairiHead
-   source venv/bin/activate
-   python3 main.py --mode interactive
-   ```
-   - **Blocker**: None
-   - **Impact**: Validates full system integration
-   - **Expected**: All components working together
+**Files to Modify:**
+- `arduino/gairihead_display/gairihead_display.ino`
 
-3. **Speaker Connection Test** [5 min] 🟡 MEDIUM PRIORITY
-   ```bash
-   # Connect speakers to Pi 5
-   # Test with: speaker-test -t wav
-   # Then run voice pipeline to hear TTS
-   ```
-   - **Blocker**: No speakers currently connected
-   - **Impact**: Verifies audio output chain
-
-### SHORT-TERM (when hardware arrives)
-
-4. **Servo Physical Testing** [1 hour]
-   - Connect servos to GPIO 17, 27, 22
-   - Run `tests/test_servos.py`
-   - Verify smooth movement
-   - Test all 24 expressions
-   - Calibrate positions
-   - **Blocker**: 🔧 Servo delivery
-
-5. **NeoPixel Ring Testing** [1 hour]
-   - Connect Pico 2 via USB
-   - Flash NeoPixel firmware
-   - Test 12-pixel rings
-   - Verify animations
-   - Sync with expressions
-   - **Blocker**: 🔧 Pico 2 delivery
+**Benefits:**
+- Errors are prominent and clear
+- User identity immediately visible
+- Professional authorization display
+- Better debugging capability
 
 ---
 
-## 📁 Key Files for Next Session
+### Option B: Wire NeoPixel Rings
+**Time:** 2-3 hours
+**Focus:** Hardware Integration
 
-### Documentation (READ FIRST)
-- `STATUS.md` - Consolidated project status (single source of truth)
-- `TESTING_CHECKLIST.md` - All test procedures and current status
-- `TODO.md` - Roadmap to completion with priorities
-- `ARDUINO_DISPLAY_INTEGRATION_STATUS.md` - Display fixes and details
+**What You'll Get:**
+- 2x 12-pixel NeoPixel rings operational
+- Eye animations synced with expressions
+- Full rainbow mode for celebrations
+- Pulsing, spinning, color-shifting effects
 
-### Test Scripts (READY TO RUN)
-- `scripts/collect_face_photos_headless.py` - Face training
-- `scripts/test_face_recognition.py` - Verify recognition
-- `scripts/test_arduino_display.py` - Display verification
-- `main.py --mode interactive` - Full integration test
-- `tests/test_servos.py` - Servo testing (when available)
+**Hardware:**
+- Pico 2 W (just arrived)
+- 2x WS2812B 12-pixel rings
+- Wiring: UART GPIO 14/15
 
-### Configuration
-- `config/gairi_head.yaml` - Main configuration (all features enabled)
-- `config/expressions.yaml` - 24 expressions defined
-
-### Core Source
-- `src/gairi_head_server.py` - WebSocket API server
-- `src/expression_engine.py` - v2.0 with 24 emotions
-- `src/voice_handler.py` - STT + TTS pipeline
-- `src/arduino_display.py` - Display controller
+**Benefits:**
+- Complete expression capability
+- Hardware integration milestone
+- Visual wow factor
 
 ---
 
-## 🚧 Known Issues & Gotchas
+### Option C: UI/UX Sprint 3 (Skip Sprint 2)
+**Time:** 4-6 hours
+**Focus:** Idle Screen Enhancements
 
-### Fixed Issues ✅
-- ~~Arduino serial buffer overflow~~ → 512-byte buffer
-- ~~Text too small on display~~ → Size 2, height 18
-- ~~Emoji wrapping~~ → Size 2, position -60
-- ~~Missing emoji mappings~~ → 7 new expressions
-- ~~Line ending detection~~ → Handles \n and \r
+**What You'll Get:**
+- Time/date display on idle screen
+- Enhanced breathing animation
+- Last interaction summary
+- Response time graph
+- Model/tier badges (🏠 local, ☁️ cloud)
 
-### Current Issues
-**None blocking operations** ✅
+**Benefits:**
+- Idle screen is useful and informative
+- Always shows relevant data
+- System feels more intelligent
 
-### Important Notes
-1. **HardwareSerial.h modification** is system-wide
-   - If Arduino IDE updates, may need to reapply 512-byte buffer
-   - Documented in sketch header
+---
 
-2. **Face training photos** needed
-   - Empty directory: `data/known_faces/tim/`
-   - Easy fix: 15 minutes
+### Option D: Face Training + Testing
+**Time:** 30 minutes
+**Focus:** Face Recognition Setup
 
-3. **Speakers** not connected
-   - TTS works, just can't hear it
-   - Easy fix: 5 minutes
+**What You'll Get:**
+- Tim's face encodings trained
+- Face recognition fully operational
+- Authorization levels working in practice
+- Proactive greeting capability
+
+**Process:**
+```bash
+cd ~/GairiHead
+source venv/bin/activate
+python3 scripts/collect_face_photos_headless.py
+# Capture 15-20 photos of Tim
+# Script generates encodings automatically
+```
+
+**Benefits:**
+- Quick win (30 min)
+- Enables authorization features
+- Required for Sprint 2 avatar testing
+
+---
+
+## 📋 Recommended Session Plan
+
+### Best Path: Face Training + Sprint 2
+
+**Phase 1: Face Training** (30 minutes)
+1. Run face collection script
+2. Capture 15-20 photos of Tim
+3. Generate encodings
+4. Test recognition accuracy
+
+**Phase 2: Sprint 2 Implementation** (4-5 hours)
+1. Error banner system (1.5h)
+2. User avatar & confidence bar (2.5h)
+3. Authorization badges (0.5h)
+4. Error history (0.5h)
+5. Test and upload (0.5h)
+
+**Total Time:** 5 hours
+**Outcome:** Face recognition operational + professional error/auth display
+
+---
+
+## 🚧 Current Blockers
+
+**None!** Everything is ready to go.
+
+**Hardware Available:**
+- ✅ NeoPixel rings arrived
+- ✅ Pico 2 W arrived
+- ✅ Servos calibrated
+- ✅ Arduino display working
+
+**Software Complete:**
+- ✅ Sprint 1 animations working
+- ✅ Security hardening done
+- ✅ All core systems operational
 
 ---
 
 ## 💡 Quick Commands for Next Session
 
-### Start Interactive Mode
+### Start Voice Assistant (Test Sprint 1)
 ```bash
-cd /home/tim/GairiHead
+cd ~/GairiHead
 source venv/bin/activate
 python3 main.py --mode interactive
-```
 
-### Test Arduino Display
-```bash
-cd /home/tim/GairiHead
-source venv/bin/activate
-python3 scripts/test_arduino_display.py
+# Watch display:
+# 1. Touch buttons - see instant feedback
+# 2. Switch to Status view - see animated state indicator
+# 3. Press Enter to talk - watch state transitions
 ```
 
 ### Collect Face Training Photos
 ```bash
-cd /home/tim/GairiHead
+cd ~/GairiHead
 source venv/bin/activate
 python3 scripts/collect_face_photos_headless.py
-```
-
-### Test Full Voice Pipeline
-```bash
-cd /home/tim/GairiHead
-python3 test_voice_simple.py
+# Follow prompts to capture photos
 ```
 
 ### Check Git Status
@@ -256,102 +204,137 @@ git status
 git log --oneline -10
 ```
 
-### Push to GitHub
+### Upload New Arduino Sketch (After Sprint 2)
 ```bash
-git push origin main
+# Stop main.py first
+arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:mega arduino/gairihead_display
 ```
+
+---
+
+## 📁 Key Files for Next Session
+
+### Documentation (Read First)
+- `docs/ARDUINO_DISPLAY_UI_PLAN.md` - Sprint 2 & 3 detailed plan
+- `docs/SESSION_2025-11-11_SPRINT_1_UI.md` - Sprint 1 completion summary
+- `docs/SESSION_2025-11-11_SECURITY_AND_UX.md` - Security hardening summary
+- `TODO.md` - Updated with Sprint 1 completion
+
+### Code to Modify (Sprint 2)
+- `arduino/gairihead_display/gairihead_display.ino` - Main display sketch
+
+### Python Code (Face Training)
+- `scripts/collect_face_photos_headless.py` - Face photo collection
+- `src/vision_handler.py` - Face recognition system
 
 ---
 
 ## 🎯 Success Criteria for Next Session
 
-### Minimum Goals:
-- [ ] Face recognition trained and tested (15 min)
-- [ ] Voice pipeline end-to-end test (10 min)
-- [ ] All documentation reviewed and verified
+### If Doing Sprint 2:
+- ✅ Error banner displays on errors
+- ✅ User avatar appears with correct color border
+- ✅ Confidence bar shows face recognition accuracy
+- ✅ Authorization badges render correctly
+- ✅ Error history viewable on debug page
+- ✅ No performance regression (< 50ms loop time)
 
-### Stretch Goals:
-- [ ] Speaker audio output verified
-- [ ] Local LLM installed (if internet available)
-- [ ] Servo mounting plan created
+### If Wiring NeoPixels:
+- ✅ Both rings light up correctly
+- ✅ 12 pixels per ring all functional
+- ✅ Can control colors via serial
+- ✅ Eye animations sync with expressions
+- ✅ No power issues or brownouts
 
-### Completion Indicators:
-- ✅ Face recognition identifies Tim correctly
-- ✅ Voice conversation works end-to-end
-- ✅ Arduino display updates during conversation
-- ✅ No crashes or errors
-- ✅ System ready for hardware integration
+### If Face Training:
+- ✅ 15-20 photos captured
+- ✅ Face encodings generated
+- ✅ Tim recognized with >90% confidence
+- ✅ Authorization level 1 assigned correctly
 
 ---
 
-## 📊 Progress Metrics
+## 📊 Progress Metrics Update
 
-### Overall: 75% Complete
+### Overall Completion: 77% (+2% from last session)
 - Software: 100% ✅
-- Hardware Integration: 60% ⏳
+- Hardware Integration: 65% ⏳ (+5% - Sprint 1 complete)
 - Intelligence: 0% ⏳
 - Physical Assembly: 0% ⏳
+- Deployment: 0% ⏳
 
-### By Phase:
-- Phase 1 (Software): COMPLETE ✅
-- Phase 2 (Hardware): IN PROGRESS ⏳
-- Phase 3 (Intelligence): PENDING ⏳
-- Phase 4 (Assembly): PENDING ⏳
-- Phase 5 (Deployment): PENDING ⏳
-
-### Confidence: HIGH
-- All core software tested
-- No critical blockers
-- Clear path to completion
-- Hardware dependencies identified
+### UI/UX Roadmap:
+- Phase 1 (Critical Fixes): 100% ✅ (2025-11-10)
+- Sprint 1 (State & Touch): 100% ✅ (2025-11-11)
+- Sprint 2 (Error & Auth): 0% ⏳ (Ready to start)
+- Sprint 3 (Idle Screen): 0% ⏳ (Planned)
 
 ---
 
 ## 🔮 Looking Ahead
 
-### This Week:
-- Face training
-- Voice testing
-- Documentation review
+### This Session (Next):
+- Face training OR Sprint 2 implementation
+- Test Sprint 1 animations in real usage
+- Potentially wire NeoPixels (hardware ready)
 
 ### Next Week:
-- Servo testing (if delivered)
-- NeoPixel testing (if delivered)
-- Local LLM setup
+- Complete UI/UX Sprints 2 & 3
+- NeoPixel integration
+- Full system integration test
 
 ### This Month:
-- Full hardware integration
-- Expression calibration
-- Performance optimization
-
-### Next 3 Months:
-- Physical assembly
-- 3D printing
-- Production deployment
+- Physical assembly planning
+- 3D printing preparation
+- Production deployment readiness
 
 ---
 
-## 📞 Questions for Tim
+## 📞 Questions to Consider
 
-1. Have the servos arrived yet?
-2. Has the Pico 2 arrived yet?
-3. Any specific expressions you want to tune first?
-4. Do you want to prioritize local LLM over cloud?
-5. Ready to collect face training photos?
-
----
-
-**Session Status**: Ready to Resume
-**Next Action**: Face training + voice test
-**Estimated Time**: 30 minutes
-**Confidence**: High - System is production-ready for testing
-
-**Git Status**:
-- Branch: main
-- Commits ahead: 2 (59c174f, 52d2003)
-- Ready to push to GitHub
+1. **UI/UX Priority**: Continue with Sprint 2, or wire NeoPixels first?
+2. **Face Training**: Do now (30 min) or later?
+3. **Sprint 1 Feedback**: Any tweaks needed before Sprint 2?
+4. **Animation Performance**: Any flicker or lag on the display?
+5. **Touch Feedback**: Is 150ms the right duration, or adjust?
 
 ---
 
-*Generated 2025-11-07 by Claude*
-*Last updated: End of Arduino display integration session*
+## 🎬 Session Kickoff Checklist
+
+When starting next session:
+- [ ] Pull latest code: `git pull origin main` (or push: `git push origin main`)
+- [ ] Check Arduino is connected: `arduino-cli board list`
+- [ ] Test Sprint 1 features: Run `main.py --mode interactive`
+- [ ] Decide on session goal: Sprint 2, NeoPixels, or Face Training
+- [ ] Review relevant docs: `ARDUINO_DISPLAY_UI_PLAN.md` for Sprint 2
+
+---
+
+**Session Status:** READY ✅
+**Blockers:** None
+**Hardware:** All arrived and ready
+**Software:** Clean, tested, committed
+**Next Milestone:** Sprint 2 (Error Display & Authorization)
+
+---
+
+**Last Updated:** 2025-11-11
+**Prepared By:** Claude
+**Git Branch:** main (6 commits ahead of origin)
+**Working Tree:** Clean ✅
+
+---
+
+## 🤖 Core Principles for Next Session
+
+Remember to apply:
+- **#2**: Assumptions cause havoc - Verify Sprint 1 works as expected before Sprint 2
+- **#4**: Do it well, then do it fast - Sprint 2 quality over speed
+- **#6**: Trust but verify - Test on hardware after each feature
+- **#7**: Complete current task - Finish Sprint 2 before starting Sprint 3
+- **#10**: Fix root problems - Error display should solve UX issues, not just look pretty
+
+---
+
+**Ready to start whenever you are!** 🚀

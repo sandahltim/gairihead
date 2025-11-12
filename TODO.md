@@ -252,6 +252,18 @@
 
 ## ✅ Recently Completed
 
+### 2025-11-11 Session (Security Hardening & UI/UX Sprint 1)
+- [x] **WebSocket Rate Limiting** - DoS protection (30 req/min, 10 max connections)
+- [x] **Graceful Shutdown** - SIGTERM/SIGINT handlers, proper resource cleanup
+- [x] **UI/UX Phase 2+ Planning** - Comprehensive 3-sprint roadmap (200+ lines)
+- [x] **Sprint 1: State Clarity & Responsiveness** - COMPLETE (4-6 hours)
+  - Animated state indicators (idle, listening, thinking, speaking, error)
+  - Instant touch feedback (150ms button invert)
+  - Progress bar for long operations (auto-trigger/hide)
+  - Animation system (20 FPS, partial updates only)
+  - Memory efficient: +40 bytes RAM, smooth animations
+  - Uploaded to Arduino and tested on hardware ✅
+
 ### 2025-11-10 Session (Display Data Flow Fixes)
 - [x] **Comprehensive GairiHead review** - Root cause analysis of display issues
 - [x] **Fixed emoji not updating** - Arduino now redraws emoji on both conversation pages (was only page 1)
@@ -299,11 +311,11 @@
 - Expression Engine: 100% ✅
 - Voice System: 95% ✅ (needs speaker test)
 - Vision System: 85% ✅ (needs face training)
-- Arduino Display: 100% ✅
+- Arduino Display: 100% ✅ (Phase 1 + Sprint 1 complete)
 - Servo Control: 100% ✅ (software only)
-- NeoPixels: 50% ⏳ (waiting for hardware)
+- NeoPixels: 50% ⏳ (hardware arrived, ready to wire)
 - LLM Integration: 90% ✅ (local LLM pending)
-- WebSocket API: 100% ✅
+- WebSocket API: 100% ✅ (with rate limiting & graceful shutdown)
 
 ### Confidence Level: HIGH
 - All core software complete and tested
