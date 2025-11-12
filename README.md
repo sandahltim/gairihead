@@ -49,6 +49,13 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - **Camera** - Face detection/recognition for authorization levels
 - **Voice I/O** - Piper TTS with audio-reactive mouth animation - **WORKING**
 
+### 🔐 Security & Authorization
+- **3-Tier System** - Level 1 (Tim), Level 2 (Guest), Level 3 (Stranger)
+- **Face Recognition** - 20+ photos per user, automatic authorization
+- **Voice-Authorized Enrollment** - Tim can register new faces by voice command - **NEW**
+- **Stranger Logging** - Unknown faces automatically logged with photos
+- **No Cloud for Strangers** - Level 3 restricted to local LLM only
+
 ---
 
 ## Quick Start
@@ -106,6 +113,22 @@ python main.py --mode interactive
 # Press Enter to trigger voice interaction
 # Speak when you see "listening" on Arduino display
 # Your conversation will appear on the display
+```
+
+### Voice-Authorized Face Enrollment (NEW)
+
+```bash
+# Production mode (touchscreen)
+python main.py --mode production
+
+# 1. Tap CENTER button on display
+# 2. Wait for face scan (must be Tim - Level 1)
+# 3. Say: "Gary, register new face"
+# 4. When prompted, say the person's name
+# 5. Person looks at camera - 20 photos auto-collected
+# 6. New user registered as Guest (Level 2)
+
+# See docs/VOICE_FACE_ENROLLMENT.md for complete guide
 ```
 
 ---
@@ -306,6 +329,10 @@ ssh tim@100.103.67.41 "systemctl --user restart gairihead"
 - Personality quirks (winks, sighs)
 - Websocket API & Gary integration
 - Camera & face detection
+- **Voice integration (Piper TTS + faster-whisper STT)** - v2.0
+- **Face recognition (3-tier authorization)** - v2.0
+- **Audio-reactive mouth animation** - v2.0
+- **Voice-authorized face enrollment** - v2.0 NEW
 
 ### 🚧 In Progress
 - Servo hardware testing (awaiting parts)
@@ -313,10 +340,10 @@ ssh tim@100.103.67.41 "systemctl --user restart gairihead"
 - 3D printed head assembly
 
 ### 📋 Planned (v2.1+)
-- Voice integration (Whisper/Piper)
-- Face recognition (Tim vs strangers)
-- Proactive behaviors
+- Proactive behaviors (ambient monitoring)
 - Expression intensity levels
+- Voice commands for face removal
+- Web interface for user management
 
 ---
 
@@ -324,6 +351,7 @@ ssh tim@100.103.67.41 "systemctl --user restart gairihead"
 
 - **Main Gary System**: [Private repo]
 - **Expressions Guide**: [docs/EXPRESSIONS_GUIDE.md](docs/EXPRESSIONS_GUIDE.md)
+- **Voice Face Enrollment**: [docs/VOICE_FACE_ENROLLMENT.md](docs/VOICE_FACE_ENROLLMENT.md)
 - **Hardware Guide**: [hardware/SHOPPING_LIST.md](hardware/SHOPPING_LIST.md)
 
 ---

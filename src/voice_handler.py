@@ -35,6 +35,7 @@ import wave
 import io
 import time
 import tempfile
+import random
 from pathlib import Path
 from loguru import logger
 from typing import Optional, Dict, Tuple
@@ -462,7 +463,7 @@ class VoiceHandler:
 
                         # Setup for audio-reactive animation
                         sample_rate = self.piper_voice.config.sample_rate
-                        blocksize = int(sample_rate * 0.05)  # 50ms chunks (slower = less jitter)
+                        blocksize = int(sample_rate * 0.03)  # 30ms chunks (faster = more responsive lip sync)
                         neutral = servo_controller.mouth_config['neutral_angle']
                         max_angle = mouth_animation_params['max_angle']
                         sensitivity = mouth_animation_params['sensitivity']
@@ -472,46 +473,71 @@ class VoiceHandler:
                         if servo_controller._detach_timer:
                             servo_controller._detach_timer.cancel()
 
-                        # Attach mouth servo, detach eyes
+                        # Attach all servos (mouth for animation, eyes for natural blinking)
                         servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(neutral)
                         servo_controller.current_mouth = neutral
-                        servo_controller.left_eyelid.detach()
-                        servo_controller.right_eyelid.detach()
+                        # Keep eyes attached for natural blinking during speech
+                        servo_controller.left_eyelid.value = servo_controller.angle_to_servo_value_left_eye(servo_controller.current_left)
+                        servo_controller.right_eyelid.value = servo_controller.angle_to_servo_value_right_eye(servo_controller.current_right)
 
                         # Smoothing state (mutable list so callback can modify)
                         smoothed_amplitude = [0.0]  # Exponential moving average
+
+                        # Eye blinking state for natural animation during speech
+                        frame_count = [0]
+                        last_blink_frame = [0]
+                        blink_interval = int(sample_rate * 4.0 / blocksize)  # Blink every ~4 seconds
 
                         # Audio-reactive callback: called for each audio chunk during playback
                         def audio_callback(outdata, frames, time_info, status):
                             """
                             Real-time audio callback - moves mouth based on actual audio amplitude
-                            With exponential smoothing to reduce jitter
+                            With faster EMA smoothing and natural eye blinks
                             """
                             # Calculate RMS amplitude of this audio chunk
                             rms = np.sqrt(np.mean(outdata**2))
 
                             # Apply non-linear scaling for more natural look
-                            scaled_amplitude = np.sqrt(rms) * sensitivity * 6.0  # 6.0x boost for maximum mouth opening
+                            scaled_amplitude = np.sqrt(rms) * sensitivity * 8.0  # 8.0x boost for more dramatic movement
 
                             # Exponential moving average for smoothing (reduces jitter)
-                            # alpha = 0.3 means 30% new value, 70% previous (smooth but responsive)
-                            alpha = 0.3
+                            # alpha = 0.6 means 60% new value, 40% previous (faster response, less lag)
+                            alpha = 0.6
                             smoothed_amplitude[0] = alpha * scaled_amplitude + (1 - alpha) * smoothed_amplitude[0]
 
                             # Clamp to 0-1
                             smoothed = min(1.0, max(0.0, smoothed_amplitude[0]))
 
-                            # Only update if change is significant (avoid micro-jitters)
+                            # Calculate mouth position (no minimum threshold for maximum responsiveness)
                             mouth_pos = neutral + int(mouth_range * smoothed)
                             mouth_pos = max(neutral, min(max_angle, mouth_pos))
 
-                            # Update mouth position only if changed by at least 1 degree
-                            if abs(mouth_pos - servo_controller.current_mouth) >= 1:
-                                try:
-                                    servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(mouth_pos)
-                                    servo_controller.current_mouth = mouth_pos
-                                except:
-                                    pass  # Ignore errors in callback (don't crash audio playback)
+                            # Update mouth position (removed 1° threshold for faster response)
+                            try:
+                                servo_controller.mouth.value = servo_controller.angle_to_servo_value_mouth(mouth_pos)
+                                servo_controller.current_mouth = mouth_pos
+                            except:
+                                pass  # Ignore errors in callback (don't crash audio playback)
+
+                            # Natural eye blinks during speech
+                            frame_count[0] += 1
+                            if frame_count[0] - last_blink_frame[0] > blink_interval:
+                                # Add variation to blink timing (±20%)
+                                if random.random() < 0.1:  # 10% chance per check = natural variation
+                                    try:
+                                        # Quick blink both eyes
+                                        servo_controller.left_eyelid.value = servo_controller.angle_to_servo_value_left_eye(0)
+                                        servo_controller.right_eyelid.value = servo_controller.angle_to_servo_value_right_eye(0)
+                                        last_blink_frame[0] = frame_count[0]
+                                    except:
+                                        pass
+                                # Re-open eyes after brief pause
+                                elif frame_count[0] - last_blink_frame[0] == 3:  # 3 frames ≈ 90ms blink
+                                    try:
+                                        servo_controller.left_eyelid.value = servo_controller.angle_to_servo_value_left_eye(servo_controller.current_left)
+                                        servo_controller.right_eyelid.value = servo_controller.angle_to_servo_value_right_eye(servo_controller.current_right)
+                                    except:
+                                        pass
 
                         # Play audio with real-time mouth animation using OutputStream
                         audio_data = audio_float * self.tts_volume

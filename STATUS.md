@@ -1,6 +1,6 @@
 # GairiHead Project Status
-**Last Updated**: 2025-11-08
-**Version**: v2.2 (Servo Calibration Complete)
+**Last Updated**: 2025-11-12
+**Version**: v2.3 (Voice-Authorized Enrollment + Enhanced Mouth Animation)
 **Project Phase**: Production Ready - All Core Systems Operational
 
 ---
@@ -14,7 +14,10 @@ GairiHead is a **fully operational** AI-powered desktop companion with personali
 **What You Can Do Right Now**:
 - Voice interactions with button-triggered or continuous modes
 - Face recognition with 3-tier authorization (Tim, Known, Stranger)
+- **Voice-authorized face enrollment** (Tim can register new users by voice) - **NEW v2.3**
 - Physical servo expressions (24 pre-defined expressions)
+- **Enhanced audio-reactive mouth animation** (faster, more responsive) - **NEW v2.3**
+- **Natural eye blinks during speech** (more lifelike) - **NEW v2.3**
 - Touchscreen display showing conversations and status
 - Remote camera capture via Gary server integration
 

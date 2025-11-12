@@ -135,8 +135,8 @@ expressions:
       emphasis_words: ["but", "however", "critical", "important"]
     mouth:
       amplitude_driven: true  # Move based on audio
-      sensitivity: 0.7
-      max_angle: 50
+      sensitivity: 0.8  # Increased from 0.7 for more dramatic movement
+      max_angle: 58  # Increased from 50 (near physical limit of 60°)
 
   welcome:
     description: "Tim detected, warm greeting"

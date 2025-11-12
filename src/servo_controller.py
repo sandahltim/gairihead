@@ -750,8 +750,7 @@ class ServoController:
         """
         Start animating mouth during speech
 
-        Detaches eyelid servos to prevent jitter during speech while allowing
-        independent eye expressions. Only mouth servo remains active.
+        Keeps all servos active for natural animation with mouth and eye movement.
 
         Args:
             base_amplitude: Base amplitude for mouth movement (0.0-1.0) - from expressions.yaml sensitivity
@@ -762,29 +761,23 @@ class ServoController:
             return
 
         # Cancel any pending detach timer (from previous set_expression, etc.)
-        # We don't want the mouth detaching during speech!
+        # We don't want servos detaching during speech!
         if self._detach_timer:
             self._detach_timer.cancel()
             logger.debug("Cancelled pending detach timer before speech animation")
 
-        # Ensure mouth servo is attached (might be detached from previous operation)
-        # Set to neutral position using .value (which attaches the servo)
+        # Ensure all servos are attached for natural animation
+        # Set mouth to neutral position using .value (which attaches the servo)
         try:
             neutral_angle = self.mouth_config['neutral_angle']
             self.mouth.value = self.angle_to_servo_value_mouth(neutral_angle)
             self.current_mouth = neutral_angle
-            logger.debug(f"Mouth servo attached and set to neutral ({neutral_angle}°)")
+            # Keep eyes attached for natural blinking during speech
+            self.left_eyelid.value = self.angle_to_servo_value_left_eye(self.current_left)
+            self.right_eyelid.value = self.angle_to_servo_value_right_eye(self.current_right)
+            logger.debug(f"All servos attached for speech animation (mouth at {neutral_angle}°, eyes active for blinking)")
         except Exception as e:
-            logger.error(f"Failed to attach mouth servo for speech animation: {e}")
-
-        # Detach eye servos to prevent jitter during speech
-        # This also allows eye expressions to be changed independently
-        try:
-            self.left_eyelid.detach()
-            self.right_eyelid.detach()
-            logger.debug("Eye servos detached for speech (prevents jitter, allows independent expressions)")
-        except:
-            pass
+            logger.error(f"Failed to attach servos for speech animation: {e}")
 
         self.speech_animation_active = True
         self._speech_animation_thread = threading.Thread(

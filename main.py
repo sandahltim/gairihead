@@ -374,14 +374,66 @@ class GairiHeadAssistant:
             logger.info("   (Speak when ready - stops automatically when done)")
 
             try:
-                # Process voice query with VAD (auto-stops when done speaking)
-                # Voice handler will update Arduino display during listening/thinking/speaking
-                response = self.voice.process_voice_query(
-                    use_vad=True,  # Use Voice Activity Detection (auto-stop)
-                    authorization=authorization
+                # Record audio
+                logger.info("🎤 Recording audio...")
+                audio = self.voice.record_audio_with_vad(
+                    max_duration=self.voice.vad_max_duration,
+                    silence_duration=self.voice.vad_silence_duration,
+                    vad_aggressiveness=self.voice.vad_aggressiveness
                 )
 
-                if response:
+                if audio is None:
+                    logger.warning("⚠️ No audio recorded")
+                    return
+
+                # Transcribe to check for special commands BEFORE sending to Gary
+                transcription = self.voice.transcribe_audio(audio, authorization)
+
+                if not transcription:
+                    logger.warning("⚠️ Transcription failed")
+                    return
+
+                logger.info(f"📝 Transcribed: \"{transcription}\"")
+
+                # Check for special commands (Tim-only) BEFORE processing with Gary
+                if authorization['level'] == 1:  # Tim only
+                    if await self._check_special_command(transcription):
+                        # Special command handled, skip normal query
+                        return
+
+                # Not a special command - process normally with Gary
+                # Update expression: thinking
+                if self.expression_engine:
+                    try:
+                        self.expression_engine.set_expression('thinking')
+                    except:
+                        pass
+
+                # Send to Gary for full processing
+                result = self.voice.llm_manager.process_audio_query(audio, self.voice.sample_rate, authorization)
+
+                if result and result.get('response'):
+                    response_text = result['response']
+
+                    # Speak response
+                    if self.expression_engine:
+                        try:
+                            self.expression_engine.set_expression('speaking')
+                        except:
+                            pass
+
+                    self.voice.speak(response_text)
+
+                    # Update display
+                    if self.arduino_display and self.arduino_display.connected:
+                        self.arduino_display.show_conversation(
+                            user_text=transcription,
+                            gairi_text=response_text,
+                            expression='idle',
+                            tier=result.get('tier', 'unknown'),
+                            response_time=result.get('time_ms', 0) / 1000.0
+                        )
+
                     logger.success(f"✅ Interaction #{self.interaction_count} complete")
                 else:
                     logger.warning("⚠️ Interaction failed - no response")
@@ -427,7 +479,183 @@ class GairiHeadAssistant:
             # Mark interaction complete and update timestamp
             self.in_interaction = False
             self.last_interaction_time = time.time()
-    
+
+    async def _check_special_command(self, transcription: str) -> bool:
+        """
+        Check and handle special voice commands (Tim-only)
+
+        Args:
+            transcription: Transcribed user query
+
+        Returns:
+            True if special command was handled, False otherwise
+        """
+        transcription_lower = transcription.lower()
+
+        # Face enrollment command
+        if any(phrase in transcription_lower for phrase in [
+            'register new face',
+            'add new face',
+            'enroll new face',
+            'add a new face',
+            'register a face',
+            'add new user',
+            'register new person',
+            'add new person'
+        ]):
+            logger.info("🎯 Face enrollment command detected (Tim authorized)")
+            await self.enroll_new_face()
+            return True
+
+        # No special command detected
+        return False
+
+    async def enroll_new_face(self):
+        """
+        Voice-guided face enrollment flow (Tim-only)
+
+        Flow:
+        1. Ask for name
+        2. Collect 20 face photos
+        3. Register as guest (Level 2)
+        4. Confirm enrollment
+        """
+        try:
+            logger.info("=" * 60)
+            logger.info("FACE ENROLLMENT MODE")
+            logger.info("=" * 60)
+
+            # Step 1: Get name via voice
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('listening')
+                except:
+                    pass
+
+            self.voice.speak("What is the person's name?")
+            logger.info("🎤 Listening for name...")
+
+            # Record name
+            audio = self.voice.record_audio_with_vad(
+                max_duration=10.0,
+                silence_duration=1.5
+            )
+
+            if audio is None:
+                self.voice.speak("Sorry, I didn't hear a name. Enrollment cancelled.")
+                logger.warning("No audio recorded for name")
+                return
+
+            # Transcribe name
+            name = self.voice.transcribe_audio(audio)
+            if not name or len(name.strip()) == 0:
+                self.voice.speak("Sorry, I didn't understand the name. Enrollment cancelled.")
+                logger.warning("Name transcription failed")
+                return
+
+            # Clean up name (remove punctuation, lowercase)
+            name = name.strip().lower().replace(' ', '_')
+            name = ''.join(c for c in name if c.isalnum() or c == '_')
+
+            logger.info(f"📝 Name captured: {name}")
+
+            # Confirm name
+            self.voice.speak(f"Okay, registering {name}. Please have them look at the camera.")
+            await asyncio.sleep(1)
+
+            # Step 2: Collect photos
+            if self.expression_engine:
+                try:
+                    self.expression_engine.set_expression('alert')
+                except:
+                    pass
+
+            # Update display
+            if self.arduino_display and self.arduino_display.connected:
+                self.arduino_display.update_status(
+                    state="enrolling",
+                    expression="alert",
+                    user=name,
+                    level=2,
+                    confidence=0.0
+                )
+
+            logger.info(f"📸 Starting photo collection for {name}...")
+            self.voice.speak("Starting photo collection. Please look at the camera and move your head through different angles.")
+
+            # Run photo collection script
+            from pathlib import Path
+            import subprocess
+
+            output_dir = Path(f"/home/tim/GairiHead/data/known_faces/{name}")
+
+            # Run headless collection
+            result = subprocess.run(
+                [
+                    'python3',
+                    '/home/tim/GairiHead/scripts/collect_face_photos_headless.py',
+                    name,
+                    '--num-photos', '20',
+                    '--interval', '2.0'
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120  # 2 minutes max
+            )
+
+            if result.returncode == 0:
+                logger.success(f"✅ Face photos collected for {name}")
+
+                # Step 3: Update metadata for Level 2 (Guest)
+                import json
+                metadata_file = output_dir / "metadata.json"
+                if metadata_file.exists():
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+                    metadata['authorization_level'] = 2  # Guest
+                    metadata['description'] = "Guest user"
+                    metadata['enrolled_by'] = "tim"
+                    metadata['enrollment_method'] = "voice_authorized"
+                    with open(metadata_file, 'w') as f:
+                        json.dump(metadata, f, indent=2)
+
+                # Step 4: Confirm
+                if self.expression_engine:
+                    try:
+                        self.expression_engine.set_expression('happy')
+                    except:
+                        pass
+
+                self.voice.speak(f"Success! {name} has been registered as a guest. They now have Level 2 access.")
+                logger.success(f"✅ {name} enrolled successfully as Level 2 (Guest)")
+
+                # Update display
+                if self.arduino_display and self.arduino_display.connected:
+                    self.arduino_display.show_conversation(
+                        user_text=f"Register {name}",
+                        gairi_text=f"✅ {name} registered as guest (Level 2)",
+                        expression="happy",
+                        tier="local",
+                        response_time=0.0
+                    )
+
+            else:
+                logger.error(f"❌ Photo collection failed: {result.stderr}")
+                self.voice.speak(f"Sorry, photo collection failed. Please try again.")
+
+                if self.expression_engine:
+                    try:
+                        self.expression_engine.set_expression('confused')
+                    except:
+                        pass
+
+        except subprocess.TimeoutExpired:
+            logger.error("❌ Face enrollment timed out")
+            self.voice.speak("Enrollment took too long. Please try again.")
+        except Exception as e:
+            logger.error(f"❌ Face enrollment error: {e}")
+            self.voice.speak("Sorry, enrollment failed due to an error.")
+
     async def run_interactive_mode(self):
         """
         Run in interactive mode (press Enter to trigger interaction)
