@@ -115,10 +115,28 @@ bool trainingLogged = false;
 // Touch handling
 unsigned long lastTouchTime = 0;
 const unsigned long touchDebounce = 500; // ms
+int touchedButton = -1;  // -1 = none, 0 = left, 1 = center, 2 = right
+unsigned long touchFeedbackStart = 0;
+const unsigned long touchFeedbackDuration = 150; // ms
+
+// Animation state
+unsigned long animationTime = 0;
+unsigned long lastAnimationUpdate = 0;
+const unsigned long animationUpdateInterval = 50; // 20 fps
+int animationFrame = 0;
+
+// Progress tracking
+unsigned long operationStartTime = 0;
+bool showProgressBar = false;
 
 // Serial buffer
 String serialBuffer = "";
 const unsigned int maxBufferSize = 1024;
+
+// Touch buttons (forward declaration for animation functions)
+TouchButton btnLeft = {10, 280, 70, 35, "View"};
+TouchButton btnCenter = {85, 280, 70, 35, "Action"};
+TouchButton btnRight = {160, 280, 70, 35, "View"};
 
 // =============================================================================
 // EXPRESSION TO EMOJI MAPPING
@@ -259,13 +277,158 @@ void drawButton(int x, int y, int w, int h, String label, uint16_t bgColor, uint
 }
 
 // =============================================================================
-// TOUCH DETECTION
+// STATE INDICATOR & ANIMATIONS
 // =============================================================================
 
-// Touch buttons at bottom
-TouchButton btnLeft = {10, 280, 70, 35, "View"};
-TouchButton btnCenter = {85, 280, 70, 35, "Action"};
-TouchButton btnRight = {160, 280, 70, 35, "View"};
+void drawStateIndicator(int x, int y) {
+  // Draw animated indicator based on current state
+  // Small area (40x40 pixels) to minimize redraw time
+
+  const int size = 40;
+  const int centerX = x + size / 2;
+  const int centerY = y + size / 2;
+
+  // Clear indicator area
+  tft.fillRect(x, y, size, size, COLOR_BG);
+
+  if (systemState == "idle") {
+    // Pulsing blue dot (slow, calm)
+    int pulsePhase = (animationFrame * 10) % 360;  // 0-360 degrees
+    float brightness = (sin(pulsePhase * 0.0174533) + 1.0) / 2.0;  // 0.0-1.0
+    int blue = 128 + (int)(brightness * 127);  // 128-255
+    uint16_t color = tft.color565(0, 50, blue);
+
+    int radius = 8 + (int)(brightness * 4);  // 8-12 pixels
+    tft.fillCircle(centerX, centerY, radius, color);
+
+  } else if (systemState == "listening") {
+    // Growing green ring (fast cycle, "I'm hearing you")
+    int ringPhase = (animationFrame * 30) % 100;  // 0-100
+    int radius = 6 + (ringPhase * 8 / 100);  // 6-14 pixels
+    uint16_t green = COLOR_AUTH_1;  // Bright green
+
+    tft.drawCircle(centerX, centerY, radius, green);
+    tft.drawCircle(centerX, centerY, radius - 1, green);  // Thicker ring
+    tft.fillCircle(centerX, centerY, 4, green);  // Center dot
+
+  } else if (systemState == "thinking") {
+    // Rotating cyan spinner (active processing)
+    int angle = (animationFrame * 20) % 360;  // Rotation angle
+    uint16_t cyan = COLOR_GAIRI;
+
+    // Draw 3 dots in rotating pattern
+    for (int i = 0; i < 3; i++) {
+      int dotAngle = angle + (i * 120);  // 120 degrees apart
+      float rad = dotAngle * 0.0174533;
+      int dotX = centerX + (int)(cos(rad) * 12);
+      int dotY = centerY + (int)(sin(rad) * 12);
+      tft.fillCircle(dotX, dotY, 3, cyan);
+    }
+
+  } else if (systemState == "speaking") {
+    // Pulsing orange bars (audio reactive)
+    int barPhase = (animationFrame * 25) % 100;
+    uint16_t orange = COLOR_EXPR;
+
+    // 3 vertical bars
+    for (int i = 0; i < 3; i++) {
+      int barHeight = 8 + ((barPhase + i * 33) % 50) / 3;  // Variable height 8-24
+      int barX = centerX - 12 + (i * 10);
+      int barY = centerY + 12 - barHeight;
+      tft.fillRect(barX, barY, 4, barHeight, orange);
+    }
+
+  } else if (systemState == "error") {
+    // Flashing red exclamation (fast, attention-grabbing)
+    int flashPhase = (animationFrame * 15) % 20;  // 0-20
+    if (flashPhase < 10) {  // Flash on for half the cycle
+      uint16_t red = COLOR_AUTH_3;
+      tft.fillCircle(centerX, centerY - 6, 3, red);  // Top dot
+      tft.fillRect(centerX - 2, centerY - 2, 4, 10, red);  // Exclamation stem
+    }
+  }
+
+  // Add state icon text below indicator
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_TEXT);
+  tft.setCursor(x - 10, y + size + 2);
+
+  if (systemState == "idle") tft.print(F("Idle"));
+  else if (systemState == "listening") tft.print(F("Listening"));
+  else if (systemState == "thinking") tft.print(F("Thinking"));
+  else if (systemState == "speaking") tft.print(F("Speaking"));
+  else if (systemState == "error") tft.print(F("Error"));
+}
+
+void drawProgressBar(int x, int y, int width, float progress, uint16_t color) {
+  // Progress bar for long operations
+  // progress: 0.0 to 1.0
+
+  const int height = 6;
+
+  // Background (dark gray)
+  tft.fillRect(x, y, width, height, tft.color565(32, 32, 32));
+
+  // Progress fill
+  int fillWidth = (int)(width * progress);
+  if (fillWidth > 0) {
+    tft.fillRect(x, y, fillWidth, height, color);
+  }
+
+  // Border
+  tft.drawRect(x, y, width, height, COLOR_TEXT);
+}
+
+void updateAnimations() {
+  // Called from loop() to update animation state
+  unsigned long currentTime = millis();
+
+  // Update animation frame at target FPS
+  if (currentTime - lastAnimationUpdate >= animationUpdateInterval) {
+    lastAnimationUpdate = currentTime;
+    animationFrame++;
+    animationTime += animationUpdateInterval;
+
+    // Redraw state indicator (only if on status view where it's visible)
+    if (currentView == VIEW_STATUS) {
+      drawStateIndicator(180, 100);  // Position in status view
+    }
+
+    // Update progress bar if active
+    if (showProgressBar && operationStartTime > 0) {
+      unsigned long elapsed = currentTime - operationStartTime;
+      float progress = min(1.0f, elapsed / 5000.0f);  // Assume 5s max operation
+
+      // Draw at bottom of screen (above buttons)
+      drawProgressBar(10, 265, SCREEN_WIDTH - 20, progress, COLOR_GAIRI);
+
+      // Auto-hide after 10 seconds
+      if (elapsed > 10000) {
+        showProgressBar = false;
+        // Clear progress bar area
+        tft.fillRect(10, 265, SCREEN_WIDTH - 20, 6, COLOR_BG);
+      }
+    }
+  }
+
+  // Handle touch feedback timeout
+  if (touchedButton >= 0) {
+    unsigned long elapsed = currentTime - touchFeedbackStart;
+    if (elapsed >= touchFeedbackDuration) {
+      // Restore button to normal appearance
+      touchedButton = -1;
+
+      // Redraw all buttons
+      drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_BUTTON, COLOR_TEXT);
+      drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("TALK"), COLOR_BUTTON, COLOR_TEXT);
+      drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_BUTTON, COLOR_TEXT);
+    }
+  }
+}
+
+// =============================================================================
+// TOUCH DETECTION
+// =============================================================================
 
 bool isTouchInButton(TSPoint p, TouchButton btn) {
   // Map touch coordinates to screen coordinates
@@ -375,29 +538,14 @@ void drawStatusView() {
   tft.print(F("L"));
   tft.print(authLevel);
 
-  // System state
+  // System state with animated indicator
   tft.setTextSize(2);
   tft.setTextColor(COLOR_EXPR);
   tft.setCursor(10, 110);
-  tft.print(systemState);
+  tft.print(F("State:"));
 
-  // State indicator badge
-  if (systemState == "listening") {
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_USER);  // Green
-    tft.setCursor(150, 115);
-    tft.print(F("[MIC]"));
-  } else if (systemState == "thinking") {
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_TITLE);  // Cyan
-    tft.setCursor(150, 115);
-    tft.print(F("[...]"));
-  } else if (systemState == "speaking") {
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_EXPR);  // Orange
-    tft.setCursor(150, 115);
-    tft.print(F("[>>>]"));
-  }
+  // Animated state indicator (right side)
+  drawStateIndicator(170, 90);
 
   // Confidence bar
   int barWidth = (int)(200 * confidence);
@@ -557,7 +705,23 @@ void handleJsonMessage(String json) {
   } else if (strcmp(type, "status") == 0) {
     userName = doc["user"].as<String>();
     authLevel = doc["level"] | 3;
-    systemState = doc["state"].as<String>();
+
+    // Track state changes for progress bar
+    String newState = doc["state"].as<String>();
+    if (newState != systemState) {
+      // Start progress bar when entering thinking/processing state
+      if (newState == "thinking" || newState == "processing") {
+        operationStartTime = millis();
+        showProgressBar = true;
+      } else {
+        // Hide progress bar when exiting thinking state
+        showProgressBar = false;
+        // Clear progress bar area
+        tft.fillRect(10, 265, SCREEN_WIDTH - 20, 8, COLOR_BG);
+      }
+    }
+    systemState = newState;
+
     confidence = doc["confidence"] | 0.0;
     expression = doc["expression"].as<String>();
 
@@ -610,14 +774,31 @@ void handleTouch() {
   }
   lastTouchTime = currentTime;
 
-  // Check which button was pressed
+  // Check which button was pressed and provide immediate visual feedback
   if (isTouchInButton(p, btnLeft)) {
+    // Immediate feedback: invert button colors
+    touchedButton = 0;
+    touchFeedbackStart = currentTime;
+    drawButton(btnLeft.x, btnLeft.y, btnLeft.w, btnLeft.h, F("<"), COLOR_TEXT, COLOR_BUTTON);
+
     Serial.println(F("{\"touch\":\"left\"}"));
     previousView();
+
   } else if (isTouchInButton(p, btnRight)) {
+    // Immediate feedback: invert button colors
+    touchedButton = 2;
+    touchFeedbackStart = currentTime;
+    drawButton(btnRight.x, btnRight.y, btnRight.w, btnRight.h, F(">"), COLOR_TEXT, COLOR_BUTTON);
+
     Serial.println(F("{\"touch\":\"right\"}"));
     nextView();
+
   } else if (isTouchInButton(p, btnCenter)) {
+    // Immediate feedback: invert button colors
+    touchedButton = 1;
+    touchFeedbackStart = currentTime;
+    drawButton(btnCenter.x, btnCenter.y, btnCenter.w, btnCenter.h, F("TALK"), COLOR_TEXT, COLOR_BUTTON);
+
     Serial.println(F("{\"touch\":\"center\"}"));
     // Reserved for future actions (voice trigger)
   }
@@ -693,6 +874,9 @@ void loop() {
 
   // Handle touch input
   handleTouch();
+
+  // Update animations (state indicators, progress bar, touch feedback)
+  updateAnimations();
 
   // Small delay - keep short for fast serial processing
   delay(10);
