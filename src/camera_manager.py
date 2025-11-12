@@ -3,8 +3,8 @@ GairiHead Camera Manager
 Unified interface for USB and Pi Camera Module with auto-detection
 
 Supports:
-- USB cameras (V4L2 via OpenCV)
-- Pi Camera Module 3 (picamera2)
+- Pi Camera Module 3 (picamera2) - DEFAULT
+- USB cameras (V4L2 via OpenCV) - FALLBACK
 - Automatic fallback and detection
 - Consistent numpy array output
 """
@@ -21,13 +21,13 @@ import subprocess
 class CameraManager:
     """Manages camera access with USB/CSI compatibility"""
 
-    def __init__(self, config_path=None, prefer_picam=False, lazy_init=False):
+    def __init__(self, config_path=None, prefer_picam=True, lazy_init=False):
         """
         Initialize camera with auto-detection
 
         Args:
             config_path: Path to gairi_head.yaml (defaults to ../config/gairi_head.yaml)
-            prefer_picam: If True, try Pi Camera first, else try USB first
+            prefer_picam: If True, try Pi Camera first, else try USB first (default: True)
             lazy_init: If True, don't open camera until first use (saves power, allows sharing)
         """
         if config_path is None:
@@ -115,22 +115,32 @@ class CameraManager:
         try:
             logger.info("Attempting to open Pi Camera Module...")
 
-            # Check if picamera2 is available
+            # Check if picamera2 is available (import with system numpy compatibility)
             try:
+                import sys
+                # Temporarily prioritize system packages for picamera2 and dependencies
+                original_path = sys.path.copy()
+                sys.path = [p for p in sys.path if 'venv' not in p or 'site-packages' not in p]
+
                 from picamera2 import Picamera2
-            except ImportError:
-                logger.warning("picamera2 not installed (install: sudo apt install python3-picamera2)")
+
+                # Restore path but keep picamera2 loaded
+                sys.path = original_path
+            except ImportError as e:
+                logger.warning(f"picamera2 not available: {e}")
                 return False
 
-            # Check if camera is detected
-            result = subprocess.run(
-                ['vcgencmd', 'get_camera'],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            if 'detected=1' not in result.stdout:
-                logger.warning("Pi Camera Module not detected by vcgencmd")
+            # Check if Pi Camera is detected (using picamera2, not vcgencmd which doesn't work on Pi 5)
+            try:
+                cameras = Picamera2.global_camera_info()
+                # Look for Pi Camera (not USB webcam)
+                picam_found = any('imx' in str(cam).lower() or 'ov' in str(cam).lower() for cam in cameras)
+                if not picam_found:
+                    logger.warning("Pi Camera Module not detected by picamera2")
+                    return False
+                logger.debug(f"Found Pi Camera in {len(cameras)} total cameras")
+            except Exception as e:
+                logger.warning(f"Failed to query cameras: {e}")
                 return False
 
             self.camera = Picamera2()
@@ -215,15 +225,19 @@ class CameraManager:
             if Path(f"/dev/video{i}").exists():
                 return True
 
-        # Check for Pi Camera
+        # Check for Pi Camera (using picamera2, not vcgencmd)
         try:
-            result = subprocess.run(
-                ['vcgencmd', 'get_camera'],
-                capture_output=True,
-                text=True,
-                timeout=1
-            )
-            if 'detected=1' in result.stdout:
+            import sys
+            original_path = sys.path.copy()
+            sys.path = [p for p in sys.path if 'venv' not in p or 'site-packages' not in p]
+
+            from picamera2 import Picamera2
+
+            sys.path = original_path
+
+            cameras = Picamera2.global_camera_info()
+            picam_found = any('imx' in str(cam).lower() or 'ov' in str(cam).lower() for cam in cameras)
+            if picam_found:
                 return True
         except:
             pass

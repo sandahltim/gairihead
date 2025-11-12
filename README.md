@@ -46,7 +46,7 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - **Websocket API** - All AI processing delegated to Gary server (ws://100.106.44.11:8765)
 - **STT**: Gary's faster-whisper (with local Whisper fallback if Gary unavailable)
 - **LLM**: 100% handled by Gary (Qwen local-tier + Haiku cloud-tier)
-- **Camera** - Face detection/recognition for authorization levels
+- **Camera** - Pi Camera Module 3 (wide NoIR) with face detection/recognition for authorization levels
 - **Voice I/O** - Piper TTS with audio-reactive mouth animation - **WORKING**
 
 ### 🔐 Security & Authorization
@@ -66,7 +66,7 @@ Integrates with [Gary](https://github.com/yourusername/gary) via websocket API.
 - Arduino Mega 2560 + TP28017 2.8" TFT HAT (for display)
 - 2x WS2812B NeoPixel rings (12 pixels each)
 - Raspberry Pi Pico 2 (for NeoPixel control)
-- USB camera (Logitech C920 or equivalent)
+- **Pi Camera Module 3** (primary) or USB camera (fallback)
 - USB microphone + speaker (EMEET OfficeCore M0 Plus recommended)
 - 5V/2A power supply for servos (separate from Pi!)
 
@@ -293,8 +293,8 @@ gairihead/
 │   ├── gairi_head_server.py       # Websocket server
 │   ├── expression_engine.py       # Emotional state (v2.0)
 │   ├── servo_controller.py        # Smooth servo control
-│   ├── camera_manager.py          # USB/Pi camera
-│   ├── vision_handler.py          # Face detection
+│   ├── camera_manager.py          # Pi Camera Module 3 (primary) / USB (fallback)
+│   ├── vision_handler.py          # Face detection & recognition
 │   └── llm_tier_manager.py        # Local/cloud LLM
 ├── config/
 │   ├── gairi_head.yaml            # Hardware config
