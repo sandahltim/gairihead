@@ -2,14 +2,20 @@
 """
 Headless Face Photo Collection for GairiHead
 Works over SSH without X11 display
+Uses CameraManager for Pi Camera Module 3 support
 """
 
+import sys
 import cv2
 import os
 import time
 from pathlib import Path
 from datetime import datetime
 import json
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+from camera_manager import CameraManager
 
 def collect_face_photos_headless(username, num_photos=20, output_dir=None, interval=2.0):
     """
@@ -34,14 +40,18 @@ def collect_face_photos_headless(username, num_photos=20, output_dir=None, inter
         cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
     )
 
-    # Open camera
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("❌ Error: Could not open camera")
+    # Open camera using CameraManager (supports Pi Camera Module 3)
+    try:
+        cam = CameraManager(lazy_init=False)
+        camera_info = cam.get_info()
+        print(f"\n{'='*70}")
+        print(f"📸 HEADLESS FACE PHOTO COLLECTION")
+        print(f"{'='*70}")
+        print(f"📷 Camera: {camera_info['type']} @ {camera_info['resolution']}")
+    except Exception as e:
+        print(f"❌ Error: Could not open camera: {e}")
         return False
 
-    print(f"\n{'='*70}")
-    print(f"📸 HEADLESS FACE PHOTO COLLECTION")
     print(f"{'='*70}")
     print(f"👤 User: {username}")
     print(f"📁 Output: {output_dir}")
@@ -78,7 +88,7 @@ def collect_face_photos_headless(username, num_photos=20, output_dir=None, inter
 
     try:
         while photos_captured < num_photos:
-            ret, frame = cap.read()
+            ret, frame = cam.read_frame()
             if not ret:
                 print("❌ Error reading frame")
                 break
@@ -124,9 +134,11 @@ def collect_face_photos_headless(username, num_photos=20, output_dir=None, inter
                     photos_captured += 1
                     last_capture_time = current_time
 
-                    # Progress indicator
+                    # Progress indicator with audio beep
                     progress_bar = "█" * photos_captured + "░" * (num_photos - photos_captured)
-                    print(f"✅ [{photos_captured:2d}/{num_photos}] {progress_bar} Quality: {quality_pct}% - {filename.name}")
+                    print(f"\a")  # System beep
+                    print(f"📸✅ [{photos_captured:2d}/{num_photos}] {progress_bar} Quality: {quality_pct}% - {filename.name}")
+                    print(f"   ⏱️  CAPTURED! Next photo in {interval} seconds...")
 
                     if photos_captured < num_photos:
                         # Provide guidance for next pose
@@ -149,7 +161,7 @@ def collect_face_photos_headless(username, num_photos=20, output_dir=None, inter
         print("\n\n⚠️  Capture interrupted (Ctrl+C)")
 
     finally:
-        cap.release()
+        cam.close()
 
     print(f"\n{'='*70}")
     print(f"✅ COLLECTION COMPLETE")
