@@ -38,6 +38,7 @@ sounddevice>=0.4.6
 soundfile>=0.12.1
 wave>=0.0.2
 webrtcvad>=2.0.10  # Voice activity detection
+# scipy - USE SYSTEM PACKAGE (1.10.1 - compatible with system numpy 1.24.2)
 
 # LLM Integration
 ollama-python>=0.1.6  # Local LLM (Llama 3.2 3B)
@@ -69,7 +70,8 @@ flake8>=6.1.0
 
 # System Packages (install with apt, not pip):
 # - python3-picamera2 (for Pi Camera Module 3 support)
-# - numpy will be automatically available from system when venv has system-site-packages enabled
+# - numpy and scipy will be automatically available from system when venv has system-site-packages enabled
+# - This avoids binary compatibility issues with system packages (picamera2, simplejpeg, opencv)
 
 # Note: Some packages require system dependencies
 # See docs/SOFTWARE_SETUP.md for installation guide
