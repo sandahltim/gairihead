@@ -52,6 +52,7 @@ from src.vision_handler import VisionHandler
 from src.arduino_display import ArduinoDisplay
 from src.expression_engine import ExpressionEngine
 from src.servo_controller import ServoController
+from src.stage_actions import StageActionHandler
 
 
 class GairiHeadAssistant:
@@ -80,6 +81,7 @@ class GairiHeadAssistant:
         self.arduino_display = None
         self.expression_engine = None
         self.voice = None
+        self.stage_actions = None  # Stage direction handler (*nods*, *sighs*, etc.)
 
         # State
         self.running = False
@@ -177,6 +179,14 @@ class GairiHeadAssistant:
                 arduino_display=self.arduino_display,
                 expression_engine=self.expression_engine
             )
+
+            # Initialize stage actions handler (processes Gary's action metadata)
+            logger.info("Initializing stage actions handler...")
+            self.stage_actions = StageActionHandler(
+                servo_controller=self.servos,
+                expression_engine=self.expression_engine
+            )
+            logger.info(f"✅ Stage actions ready ({len(self.stage_actions.sound_cache)} sounds loaded)")
             logger.success("✅ Voice handler initialized")
         except Exception as e:
             logger.error(f"❌ Voice handler initialization FAILED: {e}")
@@ -278,13 +288,13 @@ class GairiHeadAssistant:
         """Handle a single voice interaction with proper UX flow"""
         # Check if already in interaction (prevent overlapping)
         if self.in_interaction:
-            logger.debug("Already in interaction, ignoring trigger")
+            logger.warning("⚠️ Already in interaction, ignoring trigger (button pressed while busy)")
             return
 
         # Check cooldown period
         time_since_last = time.time() - self.last_interaction_time
         if time_since_last < self.interaction_cooldown:
-            logger.debug(f"Cooldown active ({time_since_last:.1f}s < {self.interaction_cooldown}s), ignoring trigger")
+            logger.info(f"⏳ Cooldown active ({time_since_last:.1f}s < {self.interaction_cooldown}s), please wait")
             return
 
         # Check if Gary is using hardware remotely
@@ -375,7 +385,9 @@ class GairiHeadAssistant:
 
             try:
                 # Record audio
-                logger.info("🎤 Recording audio...")
+                logger.info("🎤 Recording audio with VAD (speak when ready)...")
+                logger.debug(f"VAD settings: max_duration={self.voice.vad_max_duration}s, silence={self.voice.vad_silence_duration}s, aggressiveness={self.voice.vad_aggressiveness}")
+
                 audio = self.voice.record_audio_with_vad(
                     max_duration=self.voice.vad_max_duration,
                     silence_duration=self.voice.vad_silence_duration,
@@ -383,8 +395,11 @@ class GairiHeadAssistant:
                 )
 
                 if audio is None:
-                    logger.warning("⚠️ No audio recorded")
+                    logger.warning("⚠️ No audio recorded - VAD timeout or no speech detected")
+                    logger.info("   Possible causes: 1) No speech detected, 2) Microphone issue, 3) VAD sensitivity too high")
                     return
+
+                logger.info(f"✅ Audio recorded successfully ({len(audio)} samples)")
 
                 # Transcribe to check for special commands BEFORE sending to Gary
                 transcription = self.voice.transcribe_audio(audio, authorization)
@@ -415,14 +430,34 @@ class GairiHeadAssistant:
                 if result and result.get('response'):
                     response_text = result['response']
 
-                    # Speak response
-                    if self.expression_engine:
+                    # Get emotion for voice modulation from Gary's response
+                    # Handle both single emotion (string) and multiple emotions (list)
+                    emotion_data = result.get('emotion', 'idle')
+                    if isinstance(emotion_data, list) and len(emotion_data) > 0:
+                        current_emotion = emotion_data[0]  # Use primary (first) emotion
+                        logger.info(f"🎭 Gary returned emotions: {emotion_data} (using primary: {current_emotion})")
+                    else:
+                        current_emotion = emotion_data if isinstance(emotion_data, str) else 'idle'
+                        logger.info(f"🎭 Gary returned emotion: {current_emotion}")
+
+                    # Set visual expression to match emotion (eyes + eyelids)
+                    if result.get('emotion') and self.expression_engine:
                         try:
-                            self.expression_engine.set_expression('speaking')
+                            self.expression_engine.set_expression(result['emotion'])
+                            logger.info(f"🎭 Expression & Voice: {current_emotion}")
                         except:
                             pass
 
-                    self.voice.speak(response_text)
+                    # Process stage actions from Gary's metadata (winks, LED patterns, pauses, sounds)
+                    if self.stage_actions and result.get('actions'):
+                        try:
+                            await self.stage_actions.process_actions_metadata(result['actions'])
+                        except Exception as e:
+                            logger.error(f"Failed to process stage actions: {e}")
+
+                    # Speak with emotion-based voice modulation (v2.1)
+                    # NOTE: Don't set to 'speaking' - let emotion expression show during speech
+                    self.voice.speak(response_text, emotion=current_emotion)
 
                     # Update display
                     if self.arduino_display and self.arduino_display.connected:
@@ -435,6 +470,94 @@ class GairiHeadAssistant:
                         )
 
                     logger.success(f"✅ Interaction #{self.interaction_count} complete")
+
+                    # Auto-listen for follow-up response (v2.1 - conversational flow)
+                    # Multi-turn conversation without re-triggering
+                    while True:
+                        logger.info("🎤 Listening for follow-up (speak when ready)...")
+
+                        # Set listening expression
+                        if self.expression_engine:
+                            try:
+                                self.expression_engine.set_expression('listening')
+                            except:
+                                pass
+
+                        # Listen for follow-up (same VAD settings as initial query)
+                        # VAD waits for speech, then stops when you stop talking
+                        follow_up_audio = self.voice.record_audio_with_vad(
+                            max_duration=self.voice.vad_max_duration,  # 30s safety limit
+                            silence_duration=self.voice.vad_silence_duration,  # 1.5s after speech
+                            vad_aggressiveness=self.voice.vad_aggressiveness
+                        )
+
+                        if not follow_up_audio:
+                            # No follow-up - end conversation
+                            logger.debug("No follow-up detected, conversation complete")
+                            break
+
+                        # User has follow-up - process it
+                        logger.info("📢 Follow-up detected, continuing conversation...")
+
+                        # Transcribe follow-up
+                        follow_up_text = self.voice.transcribe_audio(follow_up_audio, authorization)
+
+                        if not follow_up_text:
+                            logger.warning("⚠️ Follow-up transcription failed")
+                            break
+
+                        logger.info(f"📝 Follow-up: \"{follow_up_text}\"")
+
+                        # Process follow-up with Gary
+                        if self.expression_engine:
+                            try:
+                                self.expression_engine.set_expression('thinking')
+                            except:
+                                pass
+
+                        follow_up_result = self.voice.llm_manager.process_audio_query(
+                            follow_up_audio, self.voice.sample_rate, authorization
+                        )
+
+                        if follow_up_result and follow_up_result.get('response'):
+                            follow_up_response = follow_up_result['response']
+
+                            # Get emotion from Gary's response (handle list or string)
+                            emotion_data = follow_up_result.get('emotion', 'idle')
+                            if isinstance(emotion_data, list) and len(emotion_data) > 0:
+                                current_emotion = emotion_data[0]
+                                logger.info(f"🎭 Gary returned follow-up emotions: {emotion_data} (using: {current_emotion})")
+                            else:
+                                current_emotion = emotion_data if isinstance(emotion_data, str) else 'idle'
+                                logger.info(f"🎭 Gary returned follow-up emotion: {current_emotion}")
+
+                            # Set visual expression to match emotion (if Gary sent it)
+                            if follow_up_result.get('emotion') and self.expression_engine:
+                                try:
+                                    self.expression_engine.set_expression(follow_up_result['emotion'])
+                                    logger.info(f"🎭 Follow-up expression & voice: {current_emotion}")
+                                except:
+                                    pass
+
+                            # Speak follow-up response with emotion
+                            # NOTE: Don't set to 'speaking' - let emotion expression show during speech
+                            self.voice.speak(follow_up_response, emotion=current_emotion)
+
+                            # Update display with follow-up
+                            if self.arduino_display and self.arduino_display.connected:
+                                self.arduino_display.show_conversation(
+                                    user_text=follow_up_text,
+                                    gairi_text=follow_up_response,
+                                    expression='idle',
+                                    tier=follow_up_result.get('tier', 'unknown'),
+                                    response_time=follow_up_result.get('time_ms', 0) / 1000.0
+                                )
+
+                            logger.success("✅ Follow-up complete, listening for next...")
+                            # Loop continues to listen for another follow-up
+                        else:
+                            logger.warning("⚠️ Follow-up processing failed")
+                            break
                 else:
                     logger.warning("⚠️ Interaction failed - no response")
 
@@ -479,6 +602,7 @@ class GairiHeadAssistant:
             # Mark interaction complete and update timestamp
             self.in_interaction = False
             self.last_interaction_time = time.time()
+            logger.info(f"✅ Interaction #{self.interaction_count} complete - System ready for next trigger")
 
     async def _check_special_command(self, transcription: str) -> bool:
         """
@@ -762,9 +886,13 @@ class GairiHeadAssistant:
                 # Check for touch commands from Arduino
                 cmd = self.arduino_display.check_commands()
 
-                if cmd and cmd.get('touch') == 'center':
-                    logger.info("🖱️ Center button pressed - starting interaction")
-                    await self.handle_interaction()
+                if cmd:
+                    logger.debug(f"📥 Arduino command received: {cmd}")
+                    if cmd.get('touch') == 'center':
+                        logger.info("🖱️ Center button pressed - starting interaction")
+                        await self.handle_interaction()
+                    else:
+                        logger.warning(f"⚠️ Unknown Arduino command: {cmd}")
 
                 # Small delay to avoid CPU spinning
                 await asyncio.sleep(0.1)
