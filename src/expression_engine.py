@@ -176,6 +176,8 @@ class ExpressionEngine:
         if self.servo_controller:
             # Handle eyelids (nested structure in YAML)
             if 'eyelids' in expr:
+                if 'left' in expr['eyelids'] and 'right' in expr['eyelids']:
+                    logger.info(f"👁️ Applying eyelids for '{self.current_expression}': left={expr['eyelids']['left']}°, right={expr['eyelids']['right']}°")
                 if 'left' in expr['eyelids']:
                     self.servo_controller.set_left_eyelid(expr['eyelids']['left'])
                 if 'right' in expr['eyelids']:

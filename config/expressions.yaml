@@ -131,8 +131,9 @@ expressions:
     eyes:
       maintain_current: true  # Don't change eye state
     eyelids:
-      sync_to_speech: true  # Blink on emphasis words
-      emphasis_words: ["but", "however", "critical", "important"]
+      left: 60  # Keep eyes open while talking (more than neutral 55°)
+      right: 60
+      blink_rate: 0  # Blinking handled by audio callback
     mouth:
       amplitude_driven: true  # Move based on audio
       sensitivity: 0.8  # Increased from 0.7 for more dramatic movement

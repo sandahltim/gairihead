@@ -5,21 +5,25 @@ Runs on Raspberry Pi Pico - Controls 2x 12-pixel NeoPixel rings
 Receives commands via UART from Pi 5, executes eye animations
 
 Hardware:
-- Pico GPIO 0: Left eye ring (12 pixels)
-- Pico GPIO 1: Right eye ring (12 pixels)
-- Pico UART0 (GPIO 0/1 alt function): Communication with Pi 5
+- Pico GP2: Left eye ring (12 pixels)
+- Pico GP3: Right eye ring (12 pixels)
+- Pico GP0 (UART TX): Communication to Pi 5
+- Pico GP1 (UART RX): Communication from Pi 5
 """
 
 import board
 import neopixel
+import busio
 import time
 import math
-from micropython import const
 
 # Pin definitions
 LEFT_EYE_PIN = board.GP2
 RIGHT_EYE_PIN = board.GP3
-PIXEL_COUNT = const(12)
+PIXEL_COUNT = 12
+
+# Initialize UART (GP0=TX, GP1=RX)
+uart = busio.UART(board.GP0, board.GP1, baudrate=115200, timeout=0.01)
 
 # Initialize NeoPixel rings
 left_eye = neopixel.NeoPixel(LEFT_EYE_PIN, PIXEL_COUNT, brightness=1.0, auto_write=False)
@@ -46,6 +50,8 @@ def parse_command(cmd):
     - BRIGHTNESS:128 - Set brightness (0-255)
     - ANIM:blink - Trigger animation
     """
+    cmd = cmd.strip()
+
     if cmd.startswith("EXPR:"):
         expression = cmd[5:].strip()
         set_expression(expression)
@@ -296,21 +302,46 @@ def update_animation():
 
 def main():
     """Main control loop"""
-    print("GairiHead NeoPixel Controller - Ready")
+    print("GairiHead NeoPixel Controller v1.0")
+    print("UART: 115200 baud on GP0/GP1")
+    print("Eyes: GP2 (left), GP3 (right)")
+    print("Ready for commands!")
 
     # Set initial state
     set_expression("idle")
 
+    # Command buffer
+    cmd_buffer = bytearray()
+
     while True:
         # Check for UART commands
-        # Note: In production, use asyncio or interrupts for better responsiveness
-        # This is simplified for proof-of-concept
+        if uart.in_waiting > 0:
+            data = uart.read(uart.in_waiting)
+            if data:
+                cmd_buffer.extend(data)
+
+                # Process complete commands (newline-terminated)
+                while b'\n' in cmd_buffer:
+                    newline_idx = cmd_buffer.index(b'\n')
+                    cmd_bytes = cmd_buffer[:newline_idx]
+                    cmd_buffer = cmd_buffer[newline_idx+1:]
+
+                    try:
+                        cmd = cmd_bytes.decode('utf-8').strip()
+                        if cmd:
+                            print(f"RX: {cmd}")
+                            response = parse_command(cmd)
+                            uart.write(f"{response}\n".encode('utf-8'))
+                            print(f"TX: {response}")
+                    except Exception as e:
+                        print(f"Error: {e}")
+                        uart.write(b"ERR:parse_error\n")
 
         # Update current animation
         update_animation()
 
         # Small delay to prevent CPU thrashing
-        time.sleep(0.01)
+        time.sleep(0.001)
 
 
 if __name__ == "__main__":
