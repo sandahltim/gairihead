@@ -1,0 +1,200 @@
+# Voice Emotion Mapping for GairiHead
+# Maps expression states to voice modulation parameters
+# v1.0 - 2025-11-12
+
+# Voice Parameters:
+# - speed: 0.5 to 2.0 (1.0 = normal, <1.0 = slower, >1.0 = faster)
+# - volume: 0.0 to 1.0 (relative to base TTS volume)
+# - pitch_shift: -12 to +12 semitones (0 = no change)
+
+voice_emotions:
+  # === HIGH ENERGY / EXCITEMENT ===
+
+  celebration:
+    speed: 1.3          # Faster, excited
+    volume: 1.0         # Full volume
+    pitch_shift: 2      # Slightly higher pitch (enthusiastic)
+    description: "Victory, achievement - excited and proud"
+
+  alert:
+    speed: 1.4          # Fast, urgent
+    volume: 1.0         # Full volume
+    pitch_shift: 3      # Higher pitch (alarm)
+    description: "Important information - urgent and sharp"
+
+  surprised:
+    speed: 1.3          # Quick reaction
+    volume: 0.95        # Slightly softer (surprise)
+    pitch_shift: 4      # Higher pitch (shock)
+    description: "Unexpected event - surprised voice"
+
+  happy:
+    speed: 1.15         # Slightly faster (upbeat)
+    volume: 0.9         # Normal-high
+    pitch_shift: 1      # Slightly brighter
+    description: "Positive response - warm and friendly"
+
+  amused:
+    speed: 1.1          # Slightly faster (light)
+    volume: 0.85        # Moderate
+    pitch_shift: 0      # Natural pitch
+    description: "Subtle enjoyment - gentle humor"
+
+  pride:
+    speed: 0.95         # Slightly slower (savoring)
+    volume: 0.9         # Full but controlled
+    pitch_shift: 0      # Natural, confident
+    description: "Satisfaction in work well done"
+
+  # === ANGER / FRUSTRATION ===
+
+  frustrated:
+    speed: 0.7          # Slow, deliberate
+    volume: 1.0         # Louder (emphasis)
+    pitch_shift: -2     # Slightly lower (stern)
+    description: "System error - annoyed but controlled"
+
+  disapproval:
+    speed: 0.8          # Slower, measured
+    volume: 0.8         # Moderate
+    pitch_shift: -1     # Slightly lower (judgment)
+    description: "Not impressed - doubting your plan"
+
+  # === LOW ENERGY / SADNESS ===
+
+  bored:
+    speed: 0.75         # Dragging
+    volume: 0.6         # Quiet, disinterested
+    pitch_shift: -1     # Lower, monotone
+    description: "Waiting, unengaged - low energy"
+
+  sleeping:
+    speed: 0.6          # Very slow, drowsy
+    volume: 0.5         # Very quiet
+    pitch_shift: -2     # Lower, sleepy
+    description: "Low power state - barely awake"
+
+  sheepish:
+    speed: 0.9          # Slightly slower (awkward)
+    volume: 0.7         # Quieter (embarrassed)
+    pitch_shift: 0      # Natural
+    description: "Minor mistake - embarrassed"
+
+  concerned:
+    speed: 0.9          # Slower (careful)
+    volume: 0.75        # Softer (gentle)
+    pitch_shift: 0      # Natural
+    description: "Detected problem - caring tone"
+
+  # === NEUTRAL / THINKING ===
+
+  idle:
+    speed: 1.0          # Normal baseline
+    volume: 0.8         # Default volume
+    pitch_shift: 0      # Natural pitch
+    description: "Default calm state"
+
+  thinking:
+    speed: 0.85         # Slower (processing)
+    volume: 0.75        # Quieter (internal)
+    pitch_shift: 0      # Natural
+    description: "Processing query - thoughtful"
+
+  calculating:
+    speed: 0.9          # Slightly slower (focused)
+    volume: 0.8         # Normal
+    pitch_shift: 0      # Natural
+    description: "Rapid computation - focused"
+
+  processing:
+    speed: 0.85         # Slower (working)
+    volume: 0.75        # Moderate
+    pitch_shift: 0      # Natural
+    description: "Deep computation - cloud escalation"
+
+  deep_focus:
+    speed: 0.8          # Slower (concentrated)
+    volume: 0.7         # Quieter (intense)
+    pitch_shift: -1     # Slightly lower (serious)
+    description: "Intense concentration"
+
+  # === SARCASM / WIT (TARS PERSONALITY) ===
+
+  sarcasm:
+    speed: 0.85         # Slower (deadpan delivery)
+    volume: 0.8         # Normal
+    pitch_shift: -1     # Slightly lower (dry)
+    description: "Witty response - deadpan delivery"
+
+  deadpan:
+    speed: 0.9          # Slow, flat
+    volume: 0.75        # Even tone
+    pitch_shift: 0      # Perfectly flat
+    description: "Flat humor delivery - TARS mode"
+
+  unimpressed:
+    speed: 0.8          # Slow, bored
+    volume: 0.7         # Quiet, dismissive
+    pitch_shift: -2     # Lower (uninterested)
+    description: "Not buying it - skeptical"
+
+  # === QUESTIONS / UNCERTAINTY ===
+
+  confused:
+    speed: 1.05         # Slightly faster (uncertain)
+    volume: 0.8         # Normal
+    pitch_shift: 1      # Slight uptalk (questioning)
+    description: "Need clarification - uncertain"
+
+  skeptical:
+    speed: 0.95         # Slightly slower (doubtful)
+    volume: 0.8         # Normal
+    pitch_shift: 0      # Natural
+    description: "Doubtful or questioning"
+
+  intrigued:
+    speed: 1.1          # Faster (engaged)
+    volume: 0.85        # Normal-high
+    pitch_shift: 1      # Slightly brighter (curious)
+    description: "Curious, attention caught"
+
+  # === LISTENING / SPEAKING STATES ===
+
+  listening:
+    speed: 1.0          # Normal (shouldn't speak while listening)
+    volume: 0.8         # Normal
+    pitch_shift: 0      # Natural
+    description: "Actively listening (rare to speak in this state)"
+
+  speaking:
+    speed: 1.0          # Use current emotion's speed
+    volume: 0.8         # Use current emotion's volume
+    pitch_shift: 0      # Use current emotion's pitch
+    description: "Currently speaking (maintains previous emotion)"
+
+  # === SPECIAL STATES ===
+
+  welcome:
+    speed: 1.05         # Slightly faster (friendly)
+    volume: 0.9         # Warm volume
+    pitch_shift: 1      # Slightly brighter (welcoming)
+    description: "Tim detected - warm greeting"
+
+  error:
+    speed: 0.9          # Slower (serious)
+    volume: 0.9         # Clear volume
+    pitch_shift: 0      # Natural
+    description: "System failure - serious tone"
+
+  diagnostic:
+    speed: 1.0          # Normal (systematic)
+    volume: 0.8         # Clear
+    pitch_shift: 0      # Natural
+    description: "System self-test mode"
+
+# Default fallback (if emotion not found)
+default:
+  speed: 1.0
+  volume: 0.8
+  pitch_shift: 0
+  description: "Unknown emotion - use neutral voice"
